@@ -74,13 +74,14 @@ changed file, not its transitive dependencies.
 - [src/McpContext.ts](./src/McpContext.ts) — Node: No. Removed filesystem
   roots and host-path validation; added memfs-backed file reads, writes, and
   temporary outputs; uses `isDeepStrictEqual` from the shared deep-equality
-  utility for option checks. Heap-snapshot management and screencast cleanup
-  remain excluded.
+  utility for option checks. Restored heap-snapshot manager integration and
+  all heap tool context methods. Screencast cleanup remains excluded.
 - [src/McpPage.ts](./src/McpPage.ts) — Node: No. Removed screencast recorder
   state, accessors, and disposal handling.
 - [src/McpResponse.ts](./src/McpResponse.ts) — Node: No. Snapshot and
   network-body outputs can be written through memfs-backed context callbacks.
-  Heap-snapshot response formatting remains excluded.
+  Restored heap-snapshot response state, structured fields, formatting, and
+  pagination.
 - [src/LogpointManager.ts](./src/LogpointManager.ts) — Node: No. Replaced
   `node:vm.Script` syntax validation with the Acorn parser already bundled
   through the third-party entrypoint; expressions are parsed, never run.
@@ -92,10 +93,17 @@ changed file, not its transitive dependencies.
   timeout-protected lazy connection initialization before running handlers.
   Replaced the private deep-equality implementation with the shared
   `isDeepStrictEqual` utility.
+- [src/processors/HeapSnapshotManager.ts](./src/processors/HeapSnapshotManager.ts)
+  — Node: No built-in imports remain. Restored the original snapshot loading,
+  caching, filtering, diffing, and disposal logic with normalized virtual
+  paths and memfs reads. Heap snapshot worker chunks are decoded into strings
+  for the existing loader proxy.
 - [src/index.ts](./src/index.ts) — Node: No. Exports the memfs volume and
   filesystem for browser-host seeding and access. Removed CLI setup, config
   watching, filesystem roots, telemetry initialization, and the legacy
   `createMcpServer` helper; the server now receives its browser manager.
+  Restored shared `HeapSnapshotManager` ownership and disposes it on server
+  shutdown.
 
 ### Configuration and browser integration
 
@@ -148,6 +156,12 @@ changed file, not its transitive dependencies.
 - [src/tools/lighthouse.ts](./src/tools/lighthouse.ts) — Node: No. Replaced
   `node:path` and host filesystem report writes with memfs-backed report
   output.
+- [src/tools/memory.ts](./src/tools/memory.ts) — Node: No. Restored the original
+  heap snapshot and analysis tool definitions. Heap capture now listens for
+  `HeapProfiler.addHeapSnapshotChunk` events over the page CDP session and
+  writes the resulting chunks to memfs instead of passing a host `path`.
+- [src/tools/tools.ts](./src/tools/tools.ts) — Node: No. Restored memory tool
+  registration in the shared tool factory.
 - [src/tools/network.ts](./src/tools/network.ts) — Node: No. Replaced
   host-file mock response reads with memfs reads; upstream mocks remain.
 - [src/tools/performance.ts](./src/tools/performance.ts) — Node: No. Replaced
@@ -244,8 +258,9 @@ changed file, not its transitive dependencies.
   DevTools-specific target attachment is not implemented.
 - Node.js built-ins remain in the Node-only files marked Yes above. Continue
   checking the browser graph as functionality is restored.
-- Memory/heap-snapshot and screencast features remain excluded; assess their
-  non-filesystem runtime requirements before restoring them.
+- Heap-snapshot capture and analysis are restored, but real browser capture
+  still needs validation against live `HeapProfiler` chunk events. Screencast
+  remains excluded and should be assessed separately.
 - Review and document the behavior intentionally unavailable in the
   browser-hosted build.
 - The test target is excluded from the default build, and the remaining tests
@@ -257,6 +272,8 @@ changed file, not its transitive dependencies.
 
 - `npm run format` — passed.
 - `npm run build` — passed.
+- Heap snapshot build — `npm run build` passed after restoring the memory tool
+  registration, manager, context integration, and response formatting.
 - Browser — reloaded the generated `src/index.js` graph with the browser
   bundles and memfs adapter import mappings. `globalThis.serverConfig` is a
   `ServerConfig` instance. The raw List pages button and MCP client both

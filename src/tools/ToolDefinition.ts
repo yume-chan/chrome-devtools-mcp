@@ -8,6 +8,10 @@ import {categoryToFlagName} from '../config/category-options.js';
 import type {ParsedArguments} from '../config/mcp-options.js';
 import type {DevToolsCommentBridge} from '../devtools/DevToolsCommentBridge.js';
 import type {CssFormatterOptions} from '../formatters/CssFormatter.js';
+import type {
+  ContextFilterOptions,
+  HeapSnapshotFormatOptions,
+} from '../formatters/HeapSnapshotFormatter.js';
 import type {Logpoint, LogpointOptions} from '../LogpointManager.js';
 import type {McpPage} from '../McpPage.js';
 import type {McpWorker} from '../McpWorker.js';
@@ -16,6 +20,14 @@ import type {
   NetworkMockInput,
   NetworkOverride,
 } from '../NetworkOverrideManager.js';
+import type {
+  DuplicateStringGroup,
+  HeapEdgesQueryOptions,
+  HeapQueryOptions,
+  HeapSnapshotAggregateData,
+  HeapSnapshotDetailedClassDiff,
+  HeapSnapshotDiff,
+} from '../processors/HeapSnapshotManager.js';
 import type {InsightName, TraceResult} from '../processors/PerformanceTrace.js';
 import {
   zod,
@@ -228,6 +240,51 @@ export interface DevToolsData {
 
 export interface Response {
   appendResponseLine(value: string): void;
+  setHeapSnapshotAggregates(
+    aggregateData: HeapSnapshotAggregateData,
+    options?: PaginationOptions & HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotStats(
+    stats: DevTools.HeapSnapshotModel.HeapSnapshotModel.Statistics,
+    staticData: DevTools.HeapSnapshotModel.HeapSnapshotModel.StaticData | null,
+    nativeContextSizes: DevTools.HeapSnapshotModel.HeapSnapshotModel.NativeContextSizes,
+    retainedByContextSummary: DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainedByContextSummary,
+    options?: HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotNodes(
+    nodes: DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange,
+    options?: PaginationOptions & HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotDuplicateStrings(
+    duplicateStrings: DuplicateStringGroup[],
+    options?: PaginationOptions & HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotRetainingPaths(
+    retainingPaths: DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainingPaths,
+    options?: HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotDominators(
+    dominators: DevTools.HeapSnapshotModel.HeapSnapshotModel.DominatorChain,
+    options?: HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotClassDiffs(
+    diff: HeapSnapshotDiff,
+    options?: PaginationOptions & HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotDetailedClassDiff(
+    detailedClassDiff: HeapSnapshotDetailedClassDiff,
+    options?: PaginationOptions & HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotObjectDetails(
+    objectInfo: DevTools.HeapSnapshotModel.HeapSnapshotModel.ObjectInfo,
+    options?: HeapSnapshotFormatOptions,
+  ): void;
+  setHeapSnapshotContextAnalysis(
+    analysis: DevTools.HeapSnapshotModel.HeapSnapshotModel.ContextAnalysisResult,
+    options?: PaginationOptions &
+      ContextFilterOptions &
+      HeapSnapshotFormatOptions,
+  ): void;
   setIncludePages(value: boolean): void;
   setIncludeNetworkRequests(
     value: boolean,
@@ -299,6 +356,11 @@ export type Context = Readonly<{
   uninstallPWA(options: UninstallPWAOptions): Promise<void>;
   launchPWA(options: LaunchPWAOptions): Promise<Page>;
   getPWAState(options: GetPWAStateOptions): Promise<PWAState>;
+  validatePath(filePath: string): Promise<string>;
+  ensureExtension<Extension extends `.${string}`>(
+    filePath: string,
+    extension: Extension,
+  ): Promise<`${string}${Extension}`>;
   isRunningPerformanceTrace(): boolean;
   isCruxEnabled(): boolean;
   recordedTraces(): TraceResult[];
@@ -311,12 +373,6 @@ export type Context = Readonly<{
   ): Promise<ContextPage>;
   closePage(pageId: number): Promise<void>;
   selectPage(page: ContextPage): void;
-  validatePath(filePath: string): Promise<string>;
-  ensureExtension<Extension extends `.${string}`>(
-    filePath: string,
-    extension: Extension,
-  ): Promise<`${string}${Extension}`>;
-  readFile(filePath: string): Promise<Uint8Array>;
   saveTemporaryFile(
     data: Uint8Array<ArrayBufferLike>,
     filename: string,
@@ -343,7 +399,75 @@ export type Context = Readonly<{
  * {@link defineBrowserlessTool}. Using it never triggers a browser launch or
  * connection.
  */
-export type BrowserlessContext = Readonly<object>;
+export type BrowserlessContext = Readonly<{
+  getHeapSnapshotAggregates(
+    filePath: string,
+    filterName?: string,
+    objectId?: number,
+  ): Promise<HeapSnapshotAggregateData>;
+  getHeapSnapshotDuplicateStrings(
+    filePath: string,
+  ): Promise<DuplicateStringGroup[]>;
+  getHeapSnapshotStats(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.Statistics>;
+  getHeapSnapshotStaticData(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.StaticData | null>;
+  getHeapSnapshotNativeContextSizes(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.NativeContextSizes>;
+  getHeapSnapshotRetainedByContextSummary(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainedByContextSummary>;
+  getHeapSnapshotNodesById(
+    filePath: string,
+    id: number,
+    filterName?: string,
+    objectId?: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange>;
+  getHeapSnapshotRetainers(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange>;
+  getHeapSnapshotObjectDetails(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ObjectInfo>;
+  analyzeHeapSnapshotContexts(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ContextAnalysisResult>;
+  closeHeapSnapshot(filePath: string): Promise<boolean>;
+  getHeapSnapshotRetainingPaths(
+    filePath: string,
+    nodeId: number,
+    maxDepth?: number,
+    maxNodes?: number,
+    maxSiblings?: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainingPaths>;
+  getHeapSnapshotDominators(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.DominatorChain>;
+  getHeapSnapshotEdges(
+    filePath: string,
+    nodeId: number,
+    options?: HeapEdgesQueryOptions,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange>;
+  getHeapSnapshotClassDiffs(
+    baseFilePath: string,
+    currentFilePath: string,
+  ): Promise<HeapSnapshotDiff>;
+  getHeapSnapshotDetailedClassDiff(
+    baseFilePath: string,
+    currentFilePath: string,
+    classIndex: number,
+  ): Promise<HeapSnapshotDetailedClassDiff>;
+  queryHeapSnapshotObjects(
+    filePath: string,
+    options: HeapQueryOptions,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange>;
+}>;
 
 export type MatchedStyles = DevTools.CSSMatchedStyles.CSSMatchedStyles;
 

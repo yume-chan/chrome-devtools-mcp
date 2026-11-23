@@ -8,6 +8,7 @@ import type {BrowserManager} from './BrowserManager.js';
 import type {ServerConfig} from './config/ServerConfig.js';
 import {loadIssueDescriptions} from './devtools/issueDescriptions.js';
 import {McpContext} from './McpContext.js';
+import {HeapSnapshotManager} from './processors/HeapSnapshotManager.js';
 import {
   type CallToolResult,
   ProtocolError,
@@ -42,6 +43,7 @@ export class McpServer {
   #context: McpContext;
   /** Runs every tool call and config reload. */
   #taskRunner = new TaskRunner();
+  #heapSnapshotManager = new HeapSnapshotManager(this.#taskRunner);
 
   #tools = new Map<string, ToolEntry>();
 
@@ -64,6 +66,7 @@ export class McpServer {
 
     this.#context = McpContext.create(logger, {
       config: this.#config,
+      heapSnapshotManager: this.#heapSnapshotManager,
       taskRunner: this.#taskRunner,
       getBrowser: () => this.#browserManager.ensureBrowser(),
     });
@@ -154,6 +157,7 @@ export class McpServer {
     } catch (err) {
       logger?.('Failed to dispose context', err);
     }
+    this.#heapSnapshotManager.dispose();
     await Promise.allSettled([
       this.#browserManager.close(),
       this.server.close(),

@@ -11,8 +11,18 @@ import type {ReadonlyServerConfig} from './config/ServerConfig.js';
 import {overrideDevToolsGlobals} from './devtools/DevtoolsUtils.js';
 import {McpPage} from './McpPage.js';
 import {McpWorker} from './McpWorker.js';
+import type {
+  DuplicateStringGroup,
+  HeapEdgesQueryOptions,
+  HeapQueryOptions,
+  HeapSnapshotAggregateData,
+  HeapSnapshotDetailedClassDiff,
+  HeapSnapshotDiff,
+  HeapSnapshotManager,
+} from './processors/HeapSnapshotManager.js';
 import type {TraceResult} from './processors/PerformanceTrace.js';
 import {
+  DevTools,
   Locator,
   Mutex,
   type Browser,
@@ -40,6 +50,7 @@ import {
   type SupportedExtensions,
 } from './tools/ToolDefinition.js';
 import type {Logger} from './types.js';
+import {isDeepStrictEqual} from './utils/deepEqual.js';
 import {redactUrlForLogging} from './utils/logger.js';
 import {
   getMemoryTempFilePath,
@@ -48,7 +59,6 @@ import {
   readMemoryFile,
   writeMemoryFile,
 } from './utils/memfs.js';
-import {isDeepStrictEqual} from './utils/deepEqual.js';
 import {
   fetchWithValidatedRedirects,
   validateUrlNotBlocked,
@@ -61,6 +71,7 @@ export interface McpContextOptions {
   // Custom navigation timeout in milliseconds to override default.
   navigationTimeout?: number;
   // Shared heap snapshot manager to preserve loaded snapshots across browser reconnects.
+  heapSnapshotManager: HeapSnapshotManager;
   // Creates the context queue and the page queues.
   taskRunner: TaskRunner;
   // Returns the browser to use. Called by ensureBrowser(), so the browser
@@ -104,6 +115,10 @@ const FEATURE_CONTROLLERS: readonly FeatureController[] = [
   {
     gate: {options: ['experimentalIncludeAllPages']},
     onChange: context => context.createPagesSnapshot(),
+  },
+  {
+    gate: {category: ToolCategory.MEMORY, conditions: ['memoryDebugging']},
+    onDisable: context => context.releaseHeapSnapshots(),
   },
   {
     gate: {category: ToolCategory.PERFORMANCE},
@@ -168,6 +183,7 @@ export class McpContext implements Context, BrowserlessContext {
   #locatorClass: typeof Locator;
   #config: ReadonlyServerConfig;
   #options: McpContextOptions;
+  #heapSnapshotManager: HeapSnapshotManager;
   private constructor(
     logger: Logger,
     options: McpContextOptions,
@@ -185,6 +201,7 @@ export class McpContext implements Context, BrowserlessContext {
     this.taskQueue = options.taskRunner.createQueue();
     this.#config = options.config;
     this.#options = options;
+    this.#heapSnapshotManager = options.heapSnapshotManager;
   }
 
   /**
@@ -251,6 +268,18 @@ export class McpContext implements Context, BrowserlessContext {
   syncSourceMaps(): void {
     for (const mcpPage of this.#allMcpPages()) {
       mcpPage.syncSourceMaps();
+    }
+  }
+
+  /**
+   * Closes all loaded heap snapshots when memory tools are disabled.
+   */
+  releaseHeapSnapshots(): void {
+    if (this.#heapSnapshotManager.hasSnapshots()) {
+      this.#heapSnapshotManager.dispose();
+      this.logger?.(
+        'Loaded heap snapshots were closed because memory tools were disabled.',
+      );
     }
   }
 
@@ -408,6 +437,21 @@ export class McpContext implements Context, BrowserlessContext {
 
   static resetWorkerIdsForTesting(): void {
     McpWorker.resetIdsForTesting();
+  }
+
+  async validatePath(filePath: string): Promise<string> {
+    return normalizeMemoryPath(filePath);
+  }
+
+  async ensureExtension<Extension extends `.${string}`>(
+    filePath: string,
+    extension: Extension,
+  ): Promise<`${string}${Extension}`> {
+    const resolved = await this.validatePath(filePath);
+    const separator = resolved.lastIndexOf('/');
+    const dot = resolved.lastIndexOf('.');
+    const currentExtension = dot > separator ? resolved.slice(dot) : '';
+    return `${resolved.slice(0, resolved.length - currentExtension.length)}${extension}`;
   }
 
   async newPage(
@@ -829,21 +873,6 @@ export class McpContext implements Context, BrowserlessContext {
     return this.#workers.values().find(worker => worker.id === id);
   }
 
-  async validatePath(filePath: string): Promise<string> {
-    return normalizeMemoryPath(filePath);
-  }
-
-  async ensureExtension<Extension extends `.${string}`>(
-    filePath: string,
-    extension: Extension,
-  ): Promise<`${string}${Extension}`> {
-    const resolved = await this.validatePath(filePath);
-    const separator = resolved.lastIndexOf('/');
-    const dot = resolved.lastIndexOf('.');
-    const currentExtension = dot > separator ? resolved.slice(dot) : '';
-    return `${resolved.slice(0, resolved.length - currentExtension.length)}${extension}`;
-  }
-
   async readFile(filePath: string): Promise<Uint8Array> {
     return await readMemoryFile(await this.validatePath(filePath));
   }
@@ -921,6 +950,118 @@ export class McpContext implements Context, BrowserlessContext {
     return pptrExtensions.get(id);
   }
 
+  async getHeapSnapshotAggregates(
+    filePath: string,
+    filterName?: string,
+    objectId?: number,
+  ): Promise<HeapSnapshotAggregateData> {
+    return await this.#heapSnapshotManager.getAggregates(
+      filePath,
+      filterName,
+      objectId,
+    );
+  }
+
+  async getHeapSnapshotDuplicateStrings(
+    filePath: string,
+  ): Promise<DuplicateStringGroup[]> {
+    return await this.#heapSnapshotManager.getDuplicateStrings(filePath);
+  }
+
+  async queryHeapSnapshotObjects(
+    filePath: string,
+    options: HeapQueryOptions,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
+    return await this.#heapSnapshotManager.queryObjects(filePath, options);
+  }
+
+  async getHeapSnapshotStats(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.Statistics> {
+    return await this.#heapSnapshotManager.getStats(filePath);
+  }
+
+  async getHeapSnapshotStaticData(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.StaticData | null> {
+    return await this.#heapSnapshotManager.getStaticData(filePath);
+  }
+
+  async getHeapSnapshotNativeContextSizes(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.NativeContextSizes> {
+    return await this.#heapSnapshotManager.getNativeContextSizes(filePath);
+  }
+
+  async getHeapSnapshotRetainedByContextSummary(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainedByContextSummary> {
+    return await this.#heapSnapshotManager.getRetainedByContextSummary(
+      filePath,
+    );
+  }
+
+  async getHeapSnapshotNodesById(
+    filePath: string,
+    id: number,
+    filterName?: string,
+    objectId?: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
+    return await this.#heapSnapshotManager.getNodesById(
+      filePath,
+      id,
+      filterName,
+      objectId,
+    );
+  }
+
+  async getHeapSnapshotRetainers(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
+    return await this.#heapSnapshotManager.getRetainers(filePath, nodeId);
+  }
+
+  async getHeapSnapshotObjectDetails(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ObjectInfo> {
+    return await this.#heapSnapshotManager.getObjectInfo(filePath, nodeId);
+  }
+
+  async analyzeHeapSnapshotContexts(
+    filePath: string,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ContextAnalysisResult> {
+    return await this.#heapSnapshotManager.analyzeContexts(filePath);
+  }
+
+  async closeHeapSnapshot(filePath: string): Promise<boolean> {
+    return await this.#heapSnapshotManager.disposeSnapshot(filePath);
+  }
+
+  async getHeapSnapshotRetainingPaths(
+    filePath: string,
+    nodeId: number,
+    maxDepth?: number,
+    maxNodes?: number,
+    maxSiblings?: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainingPaths> {
+    return await this.#heapSnapshotManager.getRetainingPaths(
+      filePath,
+      nodeId,
+      maxDepth,
+      maxNodes,
+      maxSiblings,
+    );
+  }
+
+  async getHeapSnapshotDominators(
+    filePath: string,
+    nodeId: number,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.DominatorChain> {
+    return await this.#heapSnapshotManager.getDominatorsOf(filePath, nodeId);
+  }
+
   async #loadNetworkResource(url: URL): Promise<string> {
     const response = await fetchWithValidatedRedirects(url, {
       policy: this.#config.resolved,
@@ -959,5 +1100,35 @@ export class McpContext implements Context, BrowserlessContext {
       default:
         throw new Error(`Unsupported protocol for: ${url}`);
     }
+  }
+
+  async getHeapSnapshotEdges(
+    filePath: string,
+    nodeId: number,
+    options?: HeapEdgesQueryOptions,
+  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
+    return await this.#heapSnapshotManager.getEdges(filePath, nodeId, options);
+  }
+
+  async getHeapSnapshotClassDiffs(
+    baseFilePath: string,
+    currentFilePath: string,
+  ): Promise<HeapSnapshotDiff> {
+    return await this.#heapSnapshotManager.getClassDiffs(
+      baseFilePath,
+      currentFilePath,
+    );
+  }
+
+  async getHeapSnapshotDetailedClassDiff(
+    baseFilePath: string,
+    currentFilePath: string,
+    classIndex: number,
+  ): Promise<HeapSnapshotDetailedClassDiff> {
+    return await this.#heapSnapshotManager.getDetailedClassDiff(
+      baseFilePath,
+      currentFilePath,
+      classIndex,
+    );
   }
 }

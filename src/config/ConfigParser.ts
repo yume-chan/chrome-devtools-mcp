@@ -5,7 +5,6 @@
  */
 
 import {readFileSync} from 'node:fs';
-import path from 'node:path';
 
 import type {Argv} from 'yargs';
 
@@ -81,10 +80,6 @@ export class ConfigParser {
     const parsed = this.buildCliParser(withoutDefaults(mcpOptions))
       .fail(false)
       .parseSync();
-    const configPath = parsed['config'];
-    if (typeof configPath === 'string') {
-      parsed['config'] = configPath ? path.resolve(configPath) : undefined;
-    }
     return stripYargsPositionalArgs(parsed);
   }
 

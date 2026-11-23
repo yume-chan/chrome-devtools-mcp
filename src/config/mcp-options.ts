@@ -53,8 +53,6 @@ export interface McpArguments
   redactNetworkHeaders: boolean;
   allowUnrestrictedPaths: boolean;
   filesystemRoot?: string[];
-  config?: string;
-  watchConfig: boolean;
 }
 
 export type ParsedArguments = {
@@ -63,6 +61,7 @@ export type ParsedArguments = {
 
 export type McpOptions = McpOptionsFor<ParsedArguments, McpOption>;
 
+export const DEFAULT_FILESYSTEM_ROOT: string[] = ['/tmp'];
 // Each retained navigation can hold up to 1,000 network requests and 10,000
 // console messages, so the history is capped to avoid running out of memory.
 export const MAX_NAVIGATION_SAVED_LIMIT = 25;
@@ -280,21 +279,11 @@ export const mcpOptions: McpOptions = {
     type: 'array',
     string: true,
     alias: 'workspace',
-    default: undefined,
+    default: DEFAULT_FILESYSTEM_ROOT,
     defaultDescription: 'OS temp directory',
     describe:
       'A directory that filesystem tools are allowed to access. May be specified more than once.',
     reloadable: true,
-  },
-  config: {
-    type: 'string',
-    describe: 'Path to JSON configuration file.',
-  },
-  watchConfig: {
-    type: 'boolean',
-    default: false,
-    describe:
-      'Watch the config file for changes and apply them without restarting. Tools (except --categoryExtensions) are enabled, disabled and updated on the fly; options used to launch or connect to the browser still require a restart.',
   },
 };
 

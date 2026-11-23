@@ -8,6 +8,7 @@ import {isDeepStrictEqual} from '../utils/deepEqual.js';
 
 import {
   CONFLICTING_ARGS,
+  DEFAULT_FILESYSTEM_ROOT,
   IMPLICATIONS,
   isReloadableOption,
   mcpOptions,
@@ -21,23 +22,6 @@ type Environment = Readonly<Record<string, string | undefined>>;
 function getEnvironment(): Environment {
   return typeof process === 'undefined' ? {} : process.env;
 }
-
-function getSystemTempDirectory(): string {
-  if (typeof process === 'undefined') {
-    return '/tmp';
-  }
-  const {TMP, TEMP, TMPDIR, TEMPDIR} = process.env;
-  const tempDirectory =
-    process.platform === 'win32'
-      ? TMP || TEMP
-      : TMPDIR || TMP || TEMP || TEMPDIR;
-  return (
-    tempDirectory ||
-    (process.platform === 'win32' ? 'C:\\Windows\\Temp' : '/tmp')
-  );
-}
-
-export const DEFAULT_FILESYSTEM_ROOT: string[] = [getSystemTempDirectory()];
 
 function isMcpOptionKey(key: string): key is keyof ParsedArguments {
   return key in mcpOptions;

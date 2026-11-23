@@ -7,6 +7,7 @@
 import {MAX_NAME_LENGTH} from '../formatters/HeapSnapshotFormatter.js';
 import {zod} from '../third_party/index.js';
 import {byteSizeRangeSchema} from '../utils/bytes.js';
+import {writeMemoryFile} from '../utils/memfs.js';
 
 import {ToolCategory} from './categories.js';
 import {
@@ -77,9 +78,23 @@ export const takeHeapSnapshot: PageToolFactory = definePageTool(() => ({
       '.heapsnapshot',
     );
 
-    await page.pptrPage.captureHeapSnapshot({
-      path: snapshotPath,
-    });
+    const session = await page.pptrPage.createCDPSession();
+    const chunks: string[] = [];
+    const onChunk = (event: {chunk: string}): void => {
+      chunks.push(event.chunk);
+    };
+    session.on('HeapProfiler.addHeapSnapshotChunk', onChunk);
+    try {
+      await session.send('HeapProfiler.takeHeapSnapshot', {
+        reportProgress: false,
+      });
+    } finally {
+      session.off('HeapProfiler.addHeapSnapshotChunk', onChunk);
+    }
+    await writeMemoryFile(
+      snapshotPath,
+      new TextEncoder().encode(chunks.join('')),
+    );
 
     response.appendResponseLine(`Heap snapshot saved to ${snapshotPath}`);
   },

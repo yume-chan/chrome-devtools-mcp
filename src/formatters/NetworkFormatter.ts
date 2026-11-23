@@ -106,18 +106,25 @@ export class NetworkFormatter {
       const requestBodyNotAvailableMessage =
         '<Request body not available anymore>';
       if (this.#options.requestFilePath) {
-        let body: Uint8Array | undefined;
-        try {
-          body = await this.#request.content();
-        } catch {
-          // Fall back to the decoded post data below.
+        if (!this.#options.saveFile) {
+          throw new Error(
+            'Unable to save the request body to a file: no saveFile callback was configured.',
+          );
         }
-        body = body?.length
-          ? body
+        // postData() is UTF-8 decoded, so binary bodies lose bytes; content()
+        // returns the raw bytes.
+        let bytes: Uint8Array | undefined;
+        try {
+          bytes = await this.#request.content();
+        } catch {
+          // Fall back to the decoded string below.
+        }
+        const body = bytes?.length
+          ? bytes
           : data
             ? new TextEncoder().encode(data)
             : undefined;
-        if (body && this.#options.saveFile) {
+        if (body) {
           const result = await this.#options.saveFile(
             body,
             this.#options.requestFilePath,
@@ -137,24 +144,31 @@ export class NetworkFormatter {
     // Load Response Body
     const response = this.#request.response();
     if (response) {
+      const responseBodyNotAvailableMessage =
+        '<Response body not available anymore>';
       if (this.#options.responseFilePath) {
+        let buffer: Uint8Array | undefined;
         try {
-          const body = await this.#readResponseBody(response);
-          if (this.#options.saveFile) {
-            const result = await this.#options.saveFile(
-              body,
-              this.#options.responseFilePath,
-              '.network-response',
-            );
-            this.#responseBodyFilePath = result.filename;
-          } else {
-            this.#responseBody = '<Response body not available anymore>';
-          }
+          buffer = await this.#readResponseBody(response);
         } catch (error) {
           this.#responseBody =
             error instanceof ResponseBodyTimeoutError
               ? responseBodyTimeoutMessage(error)
-              : '<Response body not available anymore>';
+              : responseBodyNotAvailableMessage;
+        }
+
+        if (buffer) {
+          if (!this.#options.saveFile) {
+            throw new Error(
+              'Unable to save the response body to a file: no saveFile callback was configured.',
+            );
+          }
+          const result = await this.#options.saveFile(
+            buffer,
+            this.#options.responseFilePath,
+            '.network-response',
+          );
+          this.#responseBodyFilePath = result.filename;
         }
       } else {
         this.#responseBody = await this.#getFormattedResponseBody(

@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fsSync from 'node:fs';
-import path from 'node:path';
-
 import {DevTools} from '../third_party/index.js';
 import {createIdGenerator} from '../utils/id.js';
+import {
+  normalizeMemoryPath,
+  readMemoryFile,
+} from '../utils/memfs.js';
 import type {TaskQueue, TaskRunner} from '../utils/TaskRunner.js';
 
 export interface HeapSnapshotAggregate {
@@ -154,7 +155,7 @@ export class HeapSnapshotManager {
     if (filePath === undefined) {
       return await this.#taskQueue.scheduleTask();
     }
-    const absolutePath = path.resolve(filePath);
+    const absolutePath = normalizeMemoryPath(filePath);
     let queue = this.#fileTaskQueues.get(absolutePath);
     if (!queue) {
       queue = this.#taskRunner.createQueue(this.#taskQueue);
@@ -169,7 +170,7 @@ export class HeapSnapshotManager {
         `File ${filePath} must have a .heapsnapshot or .heaptimeline extension.`,
       );
     }
-    const absolutePath = path.resolve(filePath);
+    const absolutePath = normalizeMemoryPath(filePath);
     let cached = this.#snapshots.get(absolutePath);
     if (!cached) {
       const uid = this.#snapshotIdGenerator();
@@ -496,12 +497,10 @@ export class HeapSnapshotManager {
         resolveSnapshot(snapshotProxy);
       });
 
-      const fileStream = fsSync.createReadStream(absolutePath, {
-        encoding: 'utf-8',
-        highWaterMark: 1024 * 1024,
-      });
-
-      for await (const chunk of fileStream) {
+      const fileContents = await readMemoryFile(absolutePath);
+      const text = new TextDecoder().decode(fileContents);
+      for (let offset = 0; offset < text.length; offset += 1024 * 1024) {
+        const chunk = text.slice(offset, offset + 1024 * 1024);
         await loaderProxy.write(chunk);
       }
 
@@ -547,7 +546,7 @@ export class HeapSnapshotManager {
 
   async disposeSnapshot(filePath: string): Promise<boolean> {
     using guard = await this.#scheduleTask(filePath);
-    const absolutePath = path.resolve(filePath);
+    const absolutePath = normalizeMemoryPath(filePath);
     const cached = this.#snapshots.get(absolutePath);
     if (cached) {
       this.#snapshots.delete(absolutePath);
