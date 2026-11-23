@@ -4,29 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {execSync} from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';
-import {
-  Mutex,
-  puppeteer,
-  type Browser,
-  type ChromeReleaseChannel,
-  type LaunchOptions,
-} from './third_party/index.js';
+import {Mutex, puppeteer, type Browser} from './third_party/index.js';
 import {
   logger,
   puppeteerLogger,
   redactConnectOptionsForLogging,
 } from './utils/logger.js';
 import {isAllowedUrl} from './utils/url.js';
-
-export interface BrowserManagerOptions {
-  logFile?: fs.WriteStream;
-}
 
 /**
  * Identity token for an in-flight connect/launch attempt. Instances carry no
@@ -42,16 +27,11 @@ export class BrowserManager {
   #mutex = new Mutex();
   #closingCount = 0;
   #config: ReadonlyServerConfig;
-  #options: BrowserManagerOptions;
 
   #browserAttempt: BrowserAttempt = new BrowserAttempt();
 
-  constructor(
-    config: ReadonlyServerConfig,
-    options: BrowserManagerOptions = {},
-  ) {
+  constructor(config: ReadonlyServerConfig) {
     this.#config = config;
-    this.#options = options;
   }
 
   static makeTargetFilter(enableExtensions = false) {
@@ -62,24 +42,6 @@ export class BrowserManager {
       }
       return isAllowedUrl(url, {categoryExtensions: enableExtensions});
     };
-  }
-
-  static detectDisplay(): void {
-    // Only detect display on Linux/UNIX.
-    if (os.platform() === 'win32' || os.platform() === 'darwin') {
-      return;
-    }
-    if (!process.env['DISPLAY']) {
-      try {
-        const result = execSync(
-          `ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\\0' '\\n' | grep -m1 '^DISPLAY=' | cut -d= -f2`,
-        );
-        const display = result.toString('utf8').trim();
-        process.env['DISPLAY'] = display;
-      } catch {
-        // no-op
-      }
-    }
   }
 
   /**
@@ -223,167 +185,18 @@ export class BrowserManager {
   }
 
   async #initBrowser(): Promise<Browser> {
-    if (
-      this.#config.resolved.browserUrl ||
-      this.#config.resolved.wsEndpoint ||
-      this.#config.resolved.autoConnect
-    ) {
-      return await this.#connect();
-    }
-    return await this.#launch();
-  }
-
-  async #launch(): Promise<Browser> {
-    const {
-      channel,
-      executablePath,
-      headless,
-      isolated = false,
-      categoryExtensions: enableExtensions,
-      viaCli,
-      viewport,
-      acceptInsecureCerts,
-      experimentalDevtools: devtools = false,
-      blockedUrlPattern: blocklist,
-      allowedUrlPattern: allowlist,
-      ignoreDefaultChromeArg,
-      proxyServer,
-    } = this.#config.resolved;
-
-    const profileDirName =
-      channel && channel !== 'stable'
-        ? `chrome-profile-${channel}`
-        : 'chrome-profile';
-
-    let userDataDir = this.#config.resolved.userDataDir;
-    if (!isolated && !userDataDir) {
-      userDataDir = path.join(
-        os.homedir(),
-        '.cache',
-        viaCli ? 'chrome-devtools-mcp-cli' : 'chrome-devtools-mcp',
-        profileDirName,
-      );
-      await fs.promises.mkdir(userDataDir, {
-        recursive: true,
-      });
-    }
-
-    const args: LaunchOptions['args'] = [
-      ...(this.#config.resolved.chromeArg ?? []),
-    ];
-    if (proxyServer) {
-      args.push(`--proxy-server=${proxyServer}`);
-    }
-    args.push('--hide-crash-restore-bubble');
-
-    const ignoreDefaultArgs: LaunchOptions['ignoreDefaultArgs'] =
-      ignoreDefaultChromeArg ?? false;
-
-    if (headless) {
-      args.push('--screen-info={3840x2160}');
-    }
-    let puppeteerChannel: ChromeReleaseChannel | undefined;
-    if (devtools) {
-      args.push('--auto-open-devtools-for-tabs');
-    }
-    if (!executablePath) {
-      puppeteerChannel =
-        channel && channel !== 'stable' ? `chrome-${channel}` : 'chrome';
-    }
-
-    if (!headless) {
-      BrowserManager.detectDisplay();
-    }
-
-    let browser: Browser | undefined;
-    try {
-      browser = await puppeteer.launch({
-        channel: puppeteerChannel,
-        targetFilter: BrowserManager.makeTargetFilter(enableExtensions),
-        executablePath,
-        defaultViewport: null,
-        userDataDir,
-        pipe: true,
-        headless,
-        args,
-        ignoreDefaultArgs,
-        acceptInsecureCerts,
-        handleDevToolsAsPage: true,
-        enableExtensions,
-        blocklist,
-        allowlist,
-        logger: puppeteerLogger,
-        // The entry points own signal handling and call close(), which
-        // closes the browser gracefully. Puppeteer's handlers would SIGKILL
-        // Chrome synchronously on the same signal and win the race.
-        handleSIGINT: false,
-        handleSIGTERM: false,
-        handleSIGHUP: false,
-      });
-      if (this.#options.logFile) {
-        // FIXME: we are probably subscribing too late to catch startup logs. We
-        // should expose the process earlier or expose the getRecentLogs() getter.
-        browser.process()?.stderr?.pipe(this.#options.logFile);
-        browser.process()?.stdout?.pipe(this.#options.logFile);
-      }
-      if (viewport) {
-        const [page] = await browser.pages();
-        await page?.resize({
-          contentWidth: viewport.width,
-          contentHeight: viewport.height,
-        });
-      }
-      this.#browserMode = 'launched';
-      this.#browser = browser;
-      const launched = browser;
-      launched.once('disconnected', () => this.#evictIfCurrent(launched));
-      return launched;
-    } catch (error) {
-      await browser?.close().catch(() => {
-        // Best-effort cleanup if post-launch setup failed.
-      });
-      if (
-        userDataDir &&
-        error instanceof Error &&
-        error.message.includes('The browser is already running')
-      ) {
-        throw new Error(
-          `The browser is already running for ${userDataDir}. Use --isolated to run multiple browser instances.`,
-          {
-            cause: error,
-          },
-        );
-      }
-      if (error instanceof Error) {
-        const rootError = BrowserManager.rootSandboxLaunchError(error, args);
-        if (rootError) {
-          throw rootError;
-        }
-        const displayError = BrowserManager.missingDisplayLaunchError(
-          error,
-          headless,
-        );
-        if (displayError) {
-          throw displayError;
-        }
-      }
-      throw error;
-    }
+    return await this.#connect();
   }
 
   async #connect(): Promise<Browser> {
     const {
       browserUrl: browserURL,
       wsEndpoint,
-      wsHeaders,
-      autoConnect: isAutoConnect,
-      userDataDir,
+      transport,
       blockedUrlPattern: blocklist,
       allowedUrlPattern: allowlist,
       categoryExtensions: enableExtensions,
     } = this.#config.resolved;
-    // Important: only pass channel, if autoConnect is true.
-    const channel = isAutoConnect ? this.#config.resolved.channel : undefined;
 
     const connectOptions: Parameters<typeof puppeteer.connect>[0] = {
       targetFilter: BrowserManager.makeTargetFilter(enableExtensions),
@@ -392,67 +205,17 @@ export class BrowserManager {
       blocklist,
       allowlist,
       logger: puppeteerLogger,
-      // Detects a transport that died without a close frame (e.g. an adb
-      // port-forward torn down mid-call). Puppeteer pings the socket
-      // periodically and terminates it on a missed pong, which rejects the
-      // in-flight CDP calls and fires `disconnected` so #evictIfCurrent()
-      // drops the stale handle. Without this, such a call would hang until
-      // protocolTimeout inside the context queue.
-      wsOptions: {
-        keepAlive: true,
-        headers: wsHeaders,
-      },
     };
 
-    let autoConnect = false;
     if (wsEndpoint) {
       connectOptions.browserWSEndpoint = wsEndpoint;
     } else if (browserURL) {
       connectOptions.browserURL = browserURL;
-    } else if (channel || userDataDir) {
-      autoConnect = true;
-      if (userDataDir) {
-        // TODO: re-expose this logic via Puppeteer.
-        const portPath = path.join(userDataDir, 'DevToolsActivePort');
-        try {
-          const fileContent = await fs.promises.readFile(portPath, 'utf8');
-          const [rawPort, rawPath] = fileContent
-            .split('\n')
-            .map(line => {
-              return line.trim();
-            })
-            .filter(line => {
-              return !!line;
-            });
-          if (!rawPort || !rawPath) {
-            throw new Error(
-              `Invalid DevToolsActivePort '${fileContent}' found`,
-            );
-          }
-          const port = parseInt(rawPort, 10);
-          if (isNaN(port) || port <= 0 || port > 65535) {
-            throw new Error(`Invalid port '${rawPort}' found`);
-          }
-          const browserWSEndpoint = `ws://127.0.0.1:${port}${rawPath}`;
-          connectOptions.browserWSEndpoint = browserWSEndpoint;
-        } catch (error) {
-          throw new Error(
-            `Could not connect to Chrome in ${userDataDir}. Check if Chrome is running and remote debugging is enabled by going to chrome://inspect/#remote-debugging.`,
-            {
-              cause: error,
-            },
-          );
-        }
-      } else {
-        if (!channel) {
-          throw new Error('Channel must be provided if userDataDir is missing');
-        }
-        connectOptions.channel =
-          channel === 'stable' ? 'chrome' : `chrome-${channel}`;
-      }
+    } else if (transport) {
+      connectOptions.transport = transport;
     } else {
       throw new Error(
-        'Either browserURL, wsEndpoint, channel or userDataDir must be provided',
+        'Either browserURL, wsEndpoint or transport must be provided',
       );
     }
 
@@ -469,7 +232,7 @@ export class BrowserManager {
       return connected;
     } catch (err) {
       throw new Error(
-        `Could not connect to Chrome. ${autoConnect ? `Check if Chrome is running and remote debugging is enabled by going to chrome://inspect/#remote-debugging.` : `Check if Chrome is running.`}`,
+        `Could not connect to Chrome. Check if Chrome is running.`,
         {
           cause: err,
         },

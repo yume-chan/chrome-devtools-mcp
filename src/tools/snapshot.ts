@@ -34,14 +34,12 @@ in the DevTools Elements panel (if any).`,
       .string()
       .optional()
       .describe(
-        'The absolute path, or a path relative to the current working directory, to save the snapshot to instead of attaching it to the response.',
+        'Path in the in-memory file system to save the snapshot to instead of attaching it to the response.',
       ),
   },
   blockedByDialog: true,
   concurrency: 'page',
-  verifyFilesSchema: {
-    filePath: true,
-  },
+  verifyFilesSchema: {},
   handler: async (request, response) => {
     response.includeSnapshot({
       verbose: request.params.verbose ?? false,

@@ -4,23 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {categoryToFlagName} from './config/category-options.js';
 import type {ParsedArguments} from './config/mcp-options.js';
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';
 import type {McpContext} from './McpContext.js';
 import type {McpPage} from './McpPage.js';
 import {McpResponse, type DataFormat} from './McpResponse.js';
 import {SlimMcpResponse} from './SlimMcpResponse.js';
-import {ClearcutLogger} from './telemetry/ClearcutLogger.js';
 import {
   DisposableStack,
   ProtocolError,
   ProtocolErrorCode,
   zod,
-  type Browser,
   type CallToolResult,
 } from './third_party/index.js';
 import {labels} from './tools/categories.js';
-import {categoryToFlagName} from './config/category-options.js';
 import {
   isAvailableInMode,
   isBrowserlessTool,
@@ -30,16 +28,51 @@ import {
   type BrowserlessToolDefinition,
   type DefinedPageTool,
   type DevToolsData,
-  type FileVerificationOption,
   type ToolDefinition,
 } from './tools/ToolDefinition.js';
 import {getErrorMessage, toError} from './utils/errorHandling.js';
 import {logger} from './utils/logger.js';
 import {raceWithSignal} from './utils/raceWithSignal.js';
 import type {TaskQueue} from './utils/TaskRunner.js';
-import {fileURLToPath, pathToFileURL} from 'node:url';
-import {isDeepStrictEqual} from 'node:util';
-import {isLocalBrowserEndpoint} from './utils/url.js';
+
+function isDeepStrictEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (typeof a !== typeof b) {
+    return false;
+  }
+  if (a && b && typeof a === 'object') {
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) {
+        return false;
+      }
+      for (let i = 0; i < a.length; i++) {
+        if (!isDeepStrictEqual(a[i], b[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    for (const key of aKeys) {
+      if (
+        !isDeepStrictEqual(
+          (a as Record<string, unknown>)[key],
+          (b as Record<string, unknown>)[key],
+        )
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
 
 /**
  * Upper bound on how long a tool call may wait to acquire the browser
@@ -95,109 +128,6 @@ function getDisabledReason(
   }
 
   return undefined;
-}
-
-async function validateAndResolvePathOrUrl(
-  filePathOrUrl: string,
-  context: McpContext,
-  allowUrl: boolean,
-): Promise<string | undefined> {
-  if (filePathOrUrl.trim().length === 0) {
-    return undefined;
-  }
-  let url: URL | undefined;
-  try {
-    url = new URL(filePathOrUrl);
-  } catch {
-    // Not a URL; fall through and validate it as a regular file path.
-  }
-  if (url) {
-    if (url.protocol === 'file:') {
-      return pathToFileURL(await context.validatePath(fileURLToPath(url))).href;
-    }
-    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
-      // Only pass a remote URL through unchanged for parameters whose sink
-      // actually fetches the URL or hands it to the browser (allowUrl). For a
-      // filesystem-path parameter, a value that merely looks like an http/ws
-      // URL must still be rejected outright: `new URL()` accepts
-      // `http://x/../../etc/passwd`, and the downstream filesystem API (e.g.
-      // Puppeteer's uploadFile) path.resolve()s that non-absolute string into
-      // an absolute host path, which would bypass validatePath (workspace
-      // roots and the temp-dir fallback) if it fell through to it unchanged.
-      if (allowUrl) {
-        return filePathOrUrl;
-      }
-      throw new Error('This parameter expects a file path, not a URL.');
-    }
-  }
-  return await context.validatePath(filePathOrUrl);
-}
-
-function isLocalBrowser(browser: Browser): boolean {
-  if (browser.process()) {
-    return true;
-  }
-  const wsEndpoint = browser.wsEndpoint();
-  if (wsEndpoint && isLocalBrowserEndpoint(wsEndpoint)) {
-    return true;
-  }
-  return false;
-}
-
-function shouldValidateFile(
-  option: FileVerificationOption | undefined,
-  isLocal: boolean,
-): option is FileVerificationOption {
-  if (option === true) {
-    return true;
-  }
-  if (typeof option === 'object' && option !== null) {
-    if (isLocal) {
-      return Boolean(option.local);
-    }
-    return Boolean(option.remote);
-  }
-  return false;
-}
-
-/**
- * `isLocal` tells whether files are accessed on the machine the server runs on,
- * which is always the case for browserless tools.
- */
-async function validateToolFiles(
-  tool: AnyToolDefinition,
-  params: Record<string, unknown>,
-  context: McpContext,
-  isLocal: boolean,
-): Promise<void> {
-  for (const [key, option] of Object.entries(tool.verifyFilesSchema)) {
-    if (shouldValidateFile(option, isLocal)) {
-      const allowUrl = option !== true && option.allowUrl === true;
-      const val = params[key];
-      if (typeof val === 'string') {
-        params[key] = await validateAndResolvePathOrUrl(val, context, allowUrl);
-      } else if (Array.isArray(val)) {
-        const updated: unknown[] = [];
-        for (const item of val) {
-          if (typeof item === 'string') {
-            const resolved = await validateAndResolvePathOrUrl(
-              item,
-              context,
-              allowUrl,
-            );
-            if (resolved !== undefined) {
-              updated.push(resolved);
-            }
-          } else {
-            throw new Error(
-              'Unexpected non-string value as a file path or URL',
-            );
-          }
-        }
-        params[key] = updated;
-      }
-    }
-  }
 }
 
 function toInputJsonSchema(schema: zod.ZodType): unknown {
@@ -366,7 +296,6 @@ export class ToolHandler {
     signal: AbortSignal,
   ): ReturnType<McpResponse['handle']> {
     try {
-      await validateToolFiles(tool, params, context, true);
       signal.throwIfAborted();
       await tool.handler({params}, response, context);
     } catch (err) {
@@ -397,7 +326,7 @@ export class ToolHandler {
     // discard that attempt if it succeeds later instead of handing it to a
     // subsequent caller — see BrowserManager#abandonPendingAttempt()'s doc
     // comment for the full mechanism.
-    const browser = await this.#raceWithTimeout(
+    await this.#raceWithTimeout(
       context.ensureBrowser(),
       () => this.abandonPendingBrowserAttemptOnTimeout(),
       signal,
@@ -408,7 +337,6 @@ export class ToolHandler {
     }
     let page: McpPage | undefined;
     try {
-      await validateToolFiles(tool, params, context, isLocalBrowser(browser));
       signal.throwIfAborted();
       if (isPageScopedTool(tool)) {
         const pageId = routedPageId(tool, this.#config.resolved, params);
@@ -523,10 +451,6 @@ export class ToolHandler {
     }
     const params = parseResult.data;
 
-    const startTime = Date.now();
-    let success = false;
-    let devToolsData: DevToolsData | undefined;
-    let pageUrl: string | undefined;
     try {
       logger?.(`${tool.name} request: ${JSON.stringify(params, null, '  ')}`);
       const response = isSlimTool(tool)
@@ -541,10 +465,7 @@ export class ToolHandler {
             response,
             context,
             signal,
-            (data, url) => {
-              devToolsData = data;
-              pageUrl = url;
-            },
+            () => {},
           );
       const executionGuard = guard.move();
       const completion = execution.finally(() => executionGuard.dispose());
@@ -560,7 +481,6 @@ export class ToolHandler {
       if (response.error) {
         result.isError = true;
       }
-      success = true;
       if (this.#config.resolved.experimentalStructuredContent) {
         result.structuredContent = structuredContent as Record<string, unknown>;
       }
@@ -593,15 +513,7 @@ export class ToolHandler {
       }
       return errorResult(errorText);
     } finally {
-      void ClearcutLogger.get()?.logToolInvocation({
-        toolName: tool.name,
-        params: rawArgs,
-        schema: tool.schema,
-        success,
-        latencyMs: Date.now() - startTime,
-        devToolsData,
-        pageUrl,
-      });
+      // ignore
     }
   }
 }

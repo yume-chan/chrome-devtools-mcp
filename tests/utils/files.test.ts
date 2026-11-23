@@ -11,6 +11,18 @@ import path from 'node:path';
 import {describe, it} from 'node:test';
 
 import {getTempFilePath, resolveCanonicalPath} from '../../src/utils/files.js';
+import {
+  memoryFileSystem,
+  normalizeMemoryFileUrl,
+  normalizeMemoryPath,
+  readMemoryFile,
+  writeMemoryFile,
+} from '../../src/utils/memfs.js';
+import {
+  memoryFileSystem as browserMemoryFileSystem,
+  readMemoryFile as readBrowserMemoryFile,
+  writeMemoryFile as writeBrowserMemoryFile,
+} from '../../src/utils/memfs-browser.js';
 import {createDisposableTempFile, createTempDir} from '../utils.js';
 
 async function createSymlinkOrSkip(
@@ -176,4 +188,54 @@ describe('getTempFilePath', () => {
       await assert.rejects(getTempFilePath(name), /Invalid temp file name/);
     });
   }
+});
+
+describe('memfs file helpers', () => {
+  it('normalizes and stores virtual files', async () => {
+    const filePath = `/tests/memfs-${Date.now()}/nested\\file.txt`;
+    const data = new TextEncoder().encode('virtual file');
+    const normalizedPath = normalizeMemoryPath(filePath);
+
+    await writeMemoryFile(filePath, data);
+    try {
+      assert.deepStrictEqual(await readMemoryFile(normalizedPath), data);
+    } finally {
+      await memoryFileSystem.promises.rm(
+        normalizedPath.slice(0, normalizedPath.lastIndexOf('/')),
+        {recursive: true},
+      );
+    }
+  });
+
+  it('rejects paths that escape the virtual filesystem root', () => {
+    assert.throws(
+      () => normalizeMemoryPath('../../outside.txt'),
+      /escapes the in-memory filesystem/,
+    );
+  });
+
+  it('decodes file URLs into virtual paths', () => {
+    assert.strictEqual(
+      normalizeMemoryFileUrl('file:///tmp/a%20b.txt'),
+      '/tmp/a b.txt',
+    );
+  });
+});
+
+describe('browser memfs adapter', () => {
+  it('reads and removes files in nested virtual directories', async () => {
+    const filePath = `/tests/browser-memfs-${Date.now()}/nested/file.txt`;
+    const directoryPath = filePath.slice(0, filePath.lastIndexOf('/'));
+    const data = new TextEncoder().encode('browser virtual file');
+
+    await writeBrowserMemoryFile(filePath, data);
+    try {
+      assert.deepStrictEqual(await readBrowserMemoryFile(filePath), data);
+    } finally {
+      await browserMemoryFileSystem.promises.rm(
+        directoryPath.slice(0, directoryPath.lastIndexOf('/')),
+        {recursive: true},
+      );
+    }
+  });
 });

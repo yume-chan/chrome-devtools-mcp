@@ -4,9 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import path from 'node:path';
-
-import {URLPattern} from './third_party/cli.js';
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';
 import {
   fetchWithValidatedRedirects,
@@ -19,6 +16,7 @@ import {
   Mutex,
   type Page,
   type ResourceType,
+  URLPattern,
 } from './third_party/index.js';
 import {logger, redactUrlForLogging} from './utils/logger.js';
 
@@ -129,10 +127,11 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 function inferContentType(filePath: string): string {
-  return (
-    CONTENT_TYPES[path.extname(filePath).toLowerCase()] ??
-    'application/octet-stream'
-  );
+  const normalizedPath = filePath.replaceAll('\\', '/');
+  const fileName = normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1);
+  const dot = fileName.lastIndexOf('.');
+  const extension = dot === -1 ? '' : fileName.slice(dot).toLowerCase();
+  return CONTENT_TYPES[extension] ?? 'application/octet-stream';
 }
 
 function toNetworkOverride(override: StoredNetworkOverride): NetworkOverride {

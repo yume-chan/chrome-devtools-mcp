@@ -5,7 +5,7 @@
  */
 
 import type {Flags, OutputMode, Result, RunnerResult} from 'lighthouse';
-import type {Page} from 'puppeteer-core';
+import type {Page} from 'puppeteer-core/internal/puppeteer-core-browser';
 
 export declare function snapshot(
   page: Page,

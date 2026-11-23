@@ -1,0 +1,371 @@
+<script type="importmap">
+  {
+    "imports": {
+      "./out/Default/gen/src/third_party/index.js": "./out/Default/gen/src/third_party/browser-index.js",
+      "./out/Default/gen/src/utils/memfs.js": "./out/Default/gen/src/utils/memfs-browser.js",
+      "@modelcontextprotocol/server/_shims": "./node_modules/@modelcontextprotocol/server/dist/shimsBrowser.mjs",
+      "@modelcontextprotocol/client": "https://unpkg.com/@modelcontextprotocol/client@2.4.0/dist/index.mjs",
+      "@modelcontextprotocol/client/_shims": "https://unpkg.com/@modelcontextprotocol/client@2.4.0/dist/shimsBrowser.mjs",
+      "@modelcontextprotocol/core/internal": "https://unpkg.com/@modelcontextprotocol/core@2.4.0/dist/internal.mjs",
+      "eventsource": "https://unpkg.com/eventsource@3.0.7/dist/index.js",
+      "eventsource-parser": "https://unpkg.com/eventsource-parser@3.1.1/dist/index.js",
+      "eventsource-parser/stream": "https://unpkg.com/eventsource-parser@3.1.1/dist/stream.js",
+      "pkce-challenge": "https://unpkg.com/pkce-challenge@5.0.1/dist/index.browser.js",
+      "zod/v4": "https://unpkg.com/zod@4.6.7/v4/index.js"
+    },
+    "scopes": {
+      "./node_modules/@modelcontextprotocol/client/": {
+        "@modelcontextprotocol/client/_shims": "./node_modules/@modelcontextprotocol/client/dist/shimsBrowser.mjs",
+        "@modelcontextprotocol/core/internal": "./node_modules/@modelcontextprotocol/core/dist/internal.mjs",
+        "eventsource": "./node_modules/eventsource/dist/index.js",
+        "eventsource-parser": "./node_modules/eventsource-parser/dist/index.js",
+        "eventsource-parser/stream": "./node_modules/eventsource-parser/dist/stream.js",
+        "pkce-challenge": "./node_modules/pkce-challenge/dist/index.browser.js",
+        "zod/v4": "./node_modules/zod/v4/index.js"
+      },
+      "./node_modules/eventsource/": {
+        "eventsource-parser": "./node_modules/eventsource-parser/dist/index.js"
+      },
+      "./node_modules/@modelcontextprotocol/core/": {
+        "zod/v4": "./node_modules/zod/v4/index.js"
+      }
+    }
+  }
+</script>
+<h2>Raw tool call</h2>
+<div>
+  <button id="list-pages" type="button" disabled>List pages</button>
+</div>
+<h2>MCP protocol</h2>
+<div>
+  <button id="connect-mcp-client" type="button" disabled>
+    Create MCP client and connect
+  </button>
+  <button id="list-tools" type="button" disabled>List available tools</button>
+  <button id="call-list-pages" type="button" disabled>
+    Call list_pages via MCP
+  </button>
+</div>
+<div id="output" aria-live="polite"></div>
+<script type="module">
+  import {BrowserManager} from './out/Default/gen/src/BrowserManager.js';
+  import {McpServer} from './out/Default/gen/src/index.js';
+  import {ServerConfig} from './out/Default/gen/src/config/ServerConfig.js';
+
+  const mockPages = [
+    {
+      targetId: 'mock-page-1',
+      type: 'page',
+      title: 'Example Domain',
+      url: 'https://example.com/',
+    },
+    {
+      targetId: 'mock-page-2',
+      type: 'page',
+      title: 'Chrome DevTools',
+      url: 'https://developer.chrome.com/docs/devtools/',
+    },
+    {
+      targetId: 'mock-page-3',
+      type: 'page',
+      title: 'Puppeteer',
+      url: 'https://pptr.dev/',
+    },
+  ];
+
+  const supportedMockSessionCommands = new Set([
+    'Network.enable',
+    'Page.addScriptToEvaluateOnNewDocument',
+    'Page.createIsolatedWorld',
+    'Page.enable',
+    'Page.setLifecycleEventsEnabled',
+    'Runtime.enable',
+    'Audits.enable',
+    'Performance.enable',
+    'Log.enable',
+    'WebMCP.enable',
+  ]);
+
+  const mockBrowserTransport = {
+    onmessage: null,
+    onclose: null,
+    send(message) {
+      const request = JSON.parse(message);
+      globalThis.mockCdpMessages.push({direction: 'out', message: request});
+      console.log('[mock CDP outgoing]', request);
+      if (
+        request.method === 'Target.setDiscoverTargets' &&
+        !request.sessionId
+      ) {
+        for (const targetInfo of mockPages) {
+          queueMicrotask(() =>
+            this.receive(
+              JSON.stringify({
+                method: 'Target.targetCreated',
+                params: {targetInfo: {...targetInfo, attached: false}},
+              }),
+            ),
+          );
+        }
+      } else if (
+        request.method === 'Target.setAutoAttach' &&
+        !request.sessionId
+      ) {
+        for (const [index, targetInfo] of mockPages.entries()) {
+          queueMicrotask(() =>
+            this.receive(
+              JSON.stringify({
+                method: 'Target.attachedToTarget',
+                params: {
+                  sessionId: `mock-session-${index + 1}`,
+                  targetInfo: {...targetInfo, attached: true},
+                  waitingForDebugger: false,
+                },
+              }),
+            ),
+          );
+        }
+      }
+      const reply = {
+        id: request.id,
+        ...(request.sessionId ? {sessionId: request.sessionId} : {}),
+        ...mockCdpResponse(request),
+      };
+      queueMicrotask(() => this.receive(JSON.stringify(reply)));
+    },
+    receive(message) {
+      globalThis.mockCdpMessages.push({direction: 'in', message});
+      console.log('[mock CDP incoming]', message);
+      this.onmessage?.(message);
+    },
+    close() {
+      this.onclose?.();
+    },
+  };
+  globalThis.mockCdpMessages = [];
+  globalThis.mockBrowserTransport = mockBrowserTransport;
+
+  function mockCdpResponse(request) {
+    switch (request.method) {
+      case 'Target.getBrowserContexts':
+        return {result: {browserContextIds: []}};
+      case 'Target.getTargets':
+        return {result: {targetInfos: mockPages}};
+      case 'Page.getFrameTree': {
+        const pageIndex = Number(request.sessionId?.split('-').at(-1)) - 1;
+        const mockPage = mockPages[pageIndex];
+        return {
+          result: {
+            frameTree: {
+              frame: {
+                id: `${mockPage.targetId}-frame`,
+                loaderId: `${mockPage.targetId}-loader`,
+                url: mockPage.url,
+                domainAndRegistry: '',
+                securityOrigin: new URL(mockPage.url).origin,
+                mimeType: 'text/html',
+              },
+            },
+          },
+        };
+      }
+      case 'Target.setDiscoverTargets':
+      case 'Target.setAutoAttach':
+      case 'Runtime.runIfWaitingForDebugger':
+        return {result: {}};
+      case 'Page.addScriptToEvaluateOnNewDocument':
+        return {result: {identifier: 'mock-script-id'}};
+      case 'Page.createIsolatedWorld':
+        return {result: {executionContextId: 1}};
+      case 'Browser.getVersion':
+        return {
+          result: {
+            protocolVersion: '1.3',
+            product: 'Chrome/Mock',
+            revision: 'mock',
+            userAgent: 'Chrome/Mock',
+            jsVersion: 'mock',
+          },
+        };
+      default:
+        if (
+          request.sessionId &&
+          supportedMockSessionCommands.has(request.method)
+        ) {
+          return {result: {}};
+        }
+        return {
+          error: {
+            code: -32601,
+            message: `Mock CDP command ${request.method} is unsupported.`,
+          },
+        };
+    }
+  }
+
+  const config = ServerConfig.create({
+    cliArgs: {transport: mockBrowserTransport},
+    fileArgs: {},
+    env: {},
+  });
+  const browserManager = new BrowserManager(config);
+  globalThis.ServerConfig = ServerConfig;
+  globalThis.serverConfig = config;
+  const mcpServer = await McpServer.from(config, {browserManager});
+  globalThis.mcpServer = mcpServer;
+  const outputElement = document.querySelector('#output');
+  const listPagesButton = document.querySelector('#list-pages');
+  const connectClientButton = document.querySelector('#connect-mcp-client');
+  const listToolsButton = document.querySelector('#list-tools');
+  const callListPagesButton = document.querySelector('#call-list-pages');
+  let mcpClient;
+
+  function appendOutput(label, value) {
+    const section = document.createElement('section');
+    const heading = document.createElement('h3');
+    heading.textContent = label;
+    const pre = document.createElement('pre');
+    pre.textContent =
+      typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    section.append(heading, pre);
+    outputElement.append(section);
+  }
+
+  let clientModule;
+  let clientLoadTimeout;
+  try {
+    clientModule = await Promise.race([
+      import('@modelcontextprotocol/client'),
+      new Promise((_, reject) => {
+        clientLoadTimeout = setTimeout(
+          () => reject(new Error('Timed out loading the MCP client from unpkg.com.')),
+          3000,
+        );
+      }),
+    ]);
+    appendOutput('MCP client package', 'Loaded from unpkg.com.');
+  } catch (error) {
+    appendOutput(
+      'MCP client CDN unavailable; using local package',
+      error instanceof Error ? error.message : String(error),
+    );
+    clientModule = await import(
+      './node_modules/@modelcontextprotocol/client/dist/index.mjs'
+    );
+  } finally {
+    clearTimeout(clientLoadTimeout);
+  }
+  const {Client} = clientModule;
+
+  function createTransportPair() {
+    const createEndpoint = () => ({
+      onclose: undefined,
+      onerror: undefined,
+      onmessage: undefined,
+      peer: undefined,
+      closed: false,
+      async start() {},
+      async send(message) {
+        if (this.closed || !this.peer || this.peer.closed) {
+          throw new Error('Cannot send over a closed MCP transport.');
+        }
+        const peer = this.peer;
+        queueMicrotask(() => peer.onmessage?.(message));
+      },
+      async close() {
+        if (this.closed) {
+          return;
+        }
+        this.closed = true;
+        this.onclose?.();
+        if (this.peer && !this.peer.closed) {
+          this.peer.closed = true;
+          this.peer.onclose?.();
+        }
+      },
+    });
+
+    const clientTransport = createEndpoint();
+    const serverTransport = createEndpoint();
+    clientTransport.peer = serverTransport;
+    serverTransport.peer = clientTransport;
+    return {clientTransport, serverTransport};
+  }
+
+  listPagesButton.disabled = false;
+  connectClientButton.disabled = false;
+  appendOutput('Server ready', 'McpServer constructed with a mock browser transport.');
+
+  listPagesButton.addEventListener('click', async () => {
+    listPagesButton.disabled = true;
+    try {
+      const result = await mcpServer.callTool('list_pages');
+      appendOutput('Raw tool call: list_pages', result);
+    } catch (error) {
+      appendOutput(
+        'Raw tool call: list_pages failed',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      listPagesButton.disabled = false;
+    }
+  });
+
+  connectClientButton.addEventListener('click', async () => {
+    connectClientButton.disabled = true;
+    try {
+      const {clientTransport, serverTransport} = createTransportPair();
+      mcpClient = new Client({name: 'browser-prototype', version: '1.0.0'});
+      await mcpServer.connect(serverTransport);
+      await mcpClient.connect(clientTransport);
+      globalThis.mcpClient = mcpClient;
+      listToolsButton.disabled = false;
+      callListPagesButton.disabled = false;
+      appendOutput('MCP client connected', 'Client connected directly to McpServer.');
+    } catch (error) {
+      connectClientButton.disabled = false;
+      appendOutput(
+        'MCP client connection failed',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
+
+  listToolsButton.addEventListener('click', async () => {
+    listToolsButton.disabled = true;
+    try {
+      const {tools} = await mcpClient.listTools();
+      appendOutput(
+        `MCP protocol: tools/list (${tools.length} tools)`,
+        tools
+          .map(tool => `${tool.name}: ${tool.description ?? ''}`)
+          .join('\n'),
+      );
+    } catch (error) {
+      appendOutput(
+        'MCP protocol: tools/list failed',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      listToolsButton.disabled = false;
+    }
+  });
+
+  callListPagesButton.addEventListener('click', async () => {
+    callListPagesButton.disabled = true;
+    try {
+      appendOutput(
+        'MCP protocol: tools/call list_pages',
+        await mcpClient.callTool({name: 'list_pages', arguments: {}}),
+      );
+    } catch (error) {
+      appendOutput(
+        'MCP protocol: tools/call list_pages failed',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      callListPagesButton.disabled = false;
+    }
+  });
+  console.log('McpServer constructed with a mock browser transport.');
+</script>

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {URLPattern} from '../third_party/cli.js';
+import {URLPattern} from '../third_party/index.js';
 import {redactUrlForLogging} from './logger.js';
 
 interface UrlAccessPolicy {

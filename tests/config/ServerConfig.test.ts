@@ -12,8 +12,8 @@ import sinon from 'sinon';
 
 import {ConfigLocator} from '../../src/config/ConfigLocator.js';
 import {ConfigParser} from '../../src/config/ConfigParser.js';
-import {DEFAULT_FILESYSTEM_ROOT} from '../../src/config/mcp-options.js';
 import {
+  DEFAULT_FILESYSTEM_ROOT,
   type ReadonlyServerConfig,
   ServerConfig,
 } from '../../src/config/ServerConfig.js';

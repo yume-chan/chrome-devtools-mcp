@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  * */
 
-import {isUtf8} from 'node:buffer';
-
 import {
   DevTools,
   type HTTPRequest,
@@ -108,25 +106,18 @@ export class NetworkFormatter {
       const requestBodyNotAvailableMessage =
         '<Request body not available anymore>';
       if (this.#options.requestFilePath) {
-        if (!this.#options.saveFile) {
-          throw new Error(
-            'Unable to save the request body to a file: no saveFile callback was configured.',
-          );
-        }
-        // postData() is UTF-8 decoded, so binary bodies lose bytes; content()
-        // returns the raw bytes.
-        let bytes: Uint8Array | undefined;
+        let body: Uint8Array | undefined;
         try {
-          bytes = await this.#request.content();
+          body = await this.#request.content();
         } catch {
-          // Fall back to the decoded string below.
+          // Fall back to the decoded post data below.
         }
-        const body = bytes?.length
-          ? bytes
+        body = body?.length
+          ? body
           : data
-            ? Buffer.from(data)
+            ? new TextEncoder().encode(data)
             : undefined;
-        if (body) {
+        if (body && this.#options.saveFile) {
           const result = await this.#options.saveFile(
             body,
             this.#options.requestFilePath,
@@ -146,31 +137,24 @@ export class NetworkFormatter {
     // Load Response Body
     const response = this.#request.response();
     if (response) {
-      const responseBodyNotAvailableMessage =
-        '<Response body not available anymore>';
       if (this.#options.responseFilePath) {
-        let buffer: Uint8Array | undefined;
         try {
-          buffer = await this.#readResponseBody(response);
+          const body = await this.#readResponseBody(response);
+          if (this.#options.saveFile) {
+            const result = await this.#options.saveFile(
+              body,
+              this.#options.responseFilePath,
+              '.network-response',
+            );
+            this.#responseBodyFilePath = result.filename;
+          } else {
+            this.#responseBody = '<Response body not available anymore>';
+          }
         } catch (error) {
           this.#responseBody =
             error instanceof ResponseBodyTimeoutError
               ? responseBodyTimeoutMessage(error)
-              : responseBodyNotAvailableMessage;
-        }
-
-        if (buffer) {
-          if (!this.#options.saveFile) {
-            throw new Error(
-              'Unable to save the response body to a file: no saveFile callback was configured.',
-            );
-          }
-          const result = await this.#options.saveFile(
-            buffer,
-            this.#options.responseFilePath,
-            '.network-response',
-          );
-          this.#responseBodyFilePath = result.filename;
+              : '<Response body not available anymore>';
         }
       } else {
         this.#responseBody = await this.#getFormattedResponseBody(
@@ -276,17 +260,19 @@ export class NetworkFormatter {
     try {
       const responseBuffer = await this.#readResponseBody(httpResponse);
 
-      if (isUtf8(responseBuffer)) {
-        const responseAsTest = responseBuffer.toString('utf-8');
+      try {
+        const responseAsText = new TextDecoder('utf-8', {fatal: true}).decode(
+          responseBuffer,
+        );
 
-        if (responseAsTest.length === 0) {
+        if (responseAsText.length === 0) {
           return '<empty response>';
         }
 
-        return getSizeLimitedString(responseAsTest, sizeLimit);
+        return getSizeLimitedString(responseAsText, sizeLimit);
+      } catch {
+        return '<binary data>';
       }
-
-      return '<binary data>';
     } catch (error) {
       if (error instanceof ResponseBodyTimeoutError) {
         return responseBodyTimeoutMessage(error);
@@ -295,7 +281,9 @@ export class NetworkFormatter {
     }
   }
 
-  async #readResponseBody(httpResponse: HTTPResponse): Promise<Buffer> {
+  async #readResponseBody(
+    httpResponse: HTTPResponse,
+  ): Promise<Uint8Array<ArrayBufferLike>> {
     const timeout =
       this.#options.responseBodyTimeout ?? RESPONSE_BODY_TIMEOUT_MS;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;

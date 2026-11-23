@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'node:fs/promises';
-
 import type {ParsedArguments} from '../config/mcp-options.js';
-import type {NetworkMockInput} from '../NetworkOverrideManager.js';
 import {NetworkOverridesFormatter} from '../formatters/NetworkOverridesFormatter.js';
+import type {NetworkMockInput} from '../NetworkOverrideManager.js';
 import {zod, type ResourceType} from '../third_party/index.js';
 import {validateUrlPatterns} from '../utils/url.js';
 
@@ -230,7 +228,7 @@ const mockNetworkSchema = zod
       .min(1)
       .optional()
       .describe(
-        'Local response body file, revalidated and reread for every request. Content-Type follows its extension. Mutually exclusive with upstream.',
+        'Path in the in-memory file system for the local response body. Content-Type follows its extension. Mutually exclusive with upstream.',
       ),
     upstream: zod
       .url({protocol: /^https?$/})
@@ -301,10 +299,8 @@ export const mockNetwork: PageToolFactory = definePageTool(() => ({
           ...input,
           kind: 'file',
           responseFilePath,
-          loadResponseFile: async () => {
-            const validatedPath = await context.validatePath(responseFilePath);
-            return await fs.readFile(validatedPath);
-          },
+          loadResponseFile: async () =>
+            await context.readFile(responseFilePath),
         };
       }
       overrides = [await request.page.mockNetwork(input)];

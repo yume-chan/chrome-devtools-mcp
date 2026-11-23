@@ -6,8 +6,6 @@ group("default") {
   deps = [
     ":devtools_deps",
     "//src:all",
-    "//tests",
-    "//tests:run_chrome_devtools_mcp_tests",
   ]
 }
 

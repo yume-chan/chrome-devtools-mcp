@@ -14,6 +14,7 @@ import {
 } from '../third_party/index.js';
 
 import {ToolCategory} from './categories.js';
+import {encodeBase64} from '../utils/bytes.js';
 import {definePageTool, type PageToolFactory} from './ToolDefinition.js';
 
 type ScreenshotFormat = 'png' | 'jpeg' | 'webp';
@@ -190,14 +191,12 @@ export const screenshot: PageToolFactory = definePageTool(
           .string()
           .optional()
           .describe(
-            'The absolute path, or a path relative to the current working directory, to save the screenshot to instead of attaching it to the response.',
+            'Path in the in-memory file system to save the screenshot to instead of attaching it to the response.',
           ),
       },
       blockedByDialog: true,
       concurrency: 'page',
-      verifyFilesSchema: {
-        filePath: true,
-      },
+      verifyFilesSchema: {},
       handler: async (request, response, context) => {
         if (request.params.uid && request.params.fullPage) {
           throw new Error(
@@ -313,7 +312,7 @@ export const screenshot: PageToolFactory = definePageTool(
         } else {
           response.attachImage({
             mimeType: `image/${format}`,
-            data: Buffer.from(screenshot).toString('base64'),
+            data: encodeBase64(screenshot),
           });
         }
 

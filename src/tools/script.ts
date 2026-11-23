@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {pathToFileURL} from 'node:url';
-
 import type {ParsedArguments} from '../config/mcp-options.js';
 import {
   zod,
@@ -62,7 +60,7 @@ Example with arguments: \`(el) => el.innerText\`
           .string()
           .optional()
           .describe(
-            "The absolute or relative path to a JavaScript file on the MCP server's local filesystem. Provide either this or function, but not both.",
+            'Path in the in-memory file system or an HTTP(S) URL for a JavaScript file. Provide either this or function, but not both.',
           ),
         format: zod
           .enum(['function', 'script'])
@@ -86,7 +84,7 @@ Example with arguments: \`(el) => el.innerText\`
           .string()
           .optional()
           .describe(
-            'The absolute or relative path to a file to save the script output to. If omitted, the output is returned inline.',
+            'Path in the in-memory file system to save the script output to. If omitted, the output is returned inline.',
           ),
         dialogAction: zod
           .string()
@@ -113,12 +111,7 @@ Example with arguments: \`(el) => el.innerText\`
       },
       blockedByDialog: false,
       concurrency: 'exclusive',
-      verifyFilesSchema: {
-        filePath: true,
-        // sourcePath may be an http(s): URL the server fetches, so allow URLs
-        // through; a file: path or plain path is still validated.
-        sourcePath: {local: true, remote: true, allowUrl: true},
-      },
+      verifyFilesSchema: {},
       handler: async (request, response, context) => {
         const {
           serviceWorkerId,
@@ -152,10 +145,15 @@ Example with arguments: \`(el) => el.innerText\`
             .getSelectedMcpPage()
             .waitForEventsAfterAction(
               async () => {
-                await performEvaluation(worker, source, format, [], response, {
-                  filePath,
+                await performEvaluation(
+                  worker,
+                  source,
+                  format,
+                  [],
+                  response,
                   context,
-                });
+                  filePath,
+                );
               },
               // Service workers cannot interact with the DOM, so never wait for it.
               {handleDialog: dialogAction ?? 'accept', waitForStableDom: false},
@@ -207,10 +205,8 @@ Example with arguments: \`(el) => el.innerText\`
               format,
               args,
               response,
-              {
-                filePath,
-                context,
-              },
+              context,
+              filePath,
             );
           },
           {handleDialog: dialogAction ?? 'accept', waitForStableDom},
@@ -236,11 +232,8 @@ const resolveScriptSource = async (
     throw new Error('Specify exactly one of function or sourcePath.');
   }
 
-  const resourceUrl = sourcePath.startsWith('file:')
-    ? sourcePath
-    : pathToFileURL(sourcePath).href;
   try {
-    return await context.loadResource(resourceUrl);
+    return await context.loadResource(sourcePath);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -256,7 +249,8 @@ const performEvaluation = async (
   format: 'function' | 'script',
   args: Array<JSHandle<unknown>>,
   response: Response,
-  options: {context: Context; filePath?: string},
+  context: Context,
+  filePath?: string,
 ): Promise<void> => {
   let result: string | undefined;
   if (format === 'function') {
@@ -300,11 +294,10 @@ const performEvaluation = async (
     result = await evaluatable.evaluate(value => JSON.stringify(value), value);
   }
 
-  if (options.filePath) {
-    const data = new TextEncoder().encode(result ?? 'undefined');
-    const {filename} = await options.context.saveFile(
-      data,
-      options.filePath,
+  if (filePath) {
+    const {filename} = await context.saveFile(
+      new TextEncoder().encode(result ?? 'undefined'),
+      filePath,
       '.json',
     );
     response.appendResponseLine(

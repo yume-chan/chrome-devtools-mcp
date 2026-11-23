@@ -336,6 +336,10 @@ describe('validateExpression', () => {
       () => validateExpression(`'unbalanced', (`),
       /does not compile/,
     );
+    assert.throws(
+      () => validateExpression('total); return 42; //'),
+      /does not compile/,
+    );
   });
 });
 

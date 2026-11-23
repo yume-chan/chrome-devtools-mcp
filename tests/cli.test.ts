@@ -13,10 +13,10 @@ import sinon from 'sinon';
 import {DEFAULT_MAX_NAVIGATION_SAVED} from '../src/collectors/constants.js';
 import {ConfigLocator} from '../src/config/ConfigLocator.js';
 import {ConfigParser} from '../src/config/ConfigParser.js';
+import {DEFAULT_FILESYSTEM_ROOT} from '../src/config/ServerConfig.js';
 import {
   getCliOptions,
   mcpOptions,
-  DEFAULT_FILESYSTEM_ROOT,
   MAX_NAVIGATION_SAVED_LIMIT,
 } from '../src/config/mcp-options.js';
 import {

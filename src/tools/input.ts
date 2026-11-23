@@ -108,7 +108,9 @@ async function selectNativeSelectOption(
     return false;
   }
 
-  using valueHandle = await handle.getProperty('value');
+  using valueHandle = await (
+    handle as ElementHandle<HTMLSelectElement>
+  ).getProperty('value');
 
   const value = await valueHandle.jsonValue();
   if (typeof value !== 'string') {
@@ -274,7 +276,9 @@ async function selectOption(
       using childHandle = await raceWithSignal(child.elementHandle(), signal);
       if (childHandle) {
         using childValueHandle = await raceWithSignal(
-          childHandle.getProperty('value'),
+          (childHandle as ElementHandle<HTMLOptionElement>).getProperty(
+            'value',
+          ),
           signal,
         );
 

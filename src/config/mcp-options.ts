@@ -6,8 +6,6 @@
 
 import {DEFAULT_MAX_NAVIGATION_SAVED} from '../collectors/constants.js';
 import type {YargsOptions} from '../third_party/index.js';
-import os from 'node:os';
-import path from 'node:path';
 
 import {
   getCategoryOptions,
@@ -43,7 +41,6 @@ export interface McpArguments
   experimentalFfmpegPath?: string;
   screencastFps?: number;
   performanceCrux: boolean;
-  usageStatistics: boolean;
   javascriptEvaluation: boolean;
   fileNavigations: boolean;
   sourceMaps: boolean;
@@ -66,7 +63,6 @@ export type ParsedArguments = {
 
 export type McpOptions = McpOptionsFor<ParsedArguments, McpOption>;
 
-export const DEFAULT_FILESYSTEM_ROOT: string[] = [os.tmpdir()];
 // Each retained navigation can hold up to 1,000 network requests and 10,000
 // console messages, so the history is capped to avoid running out of memory.
 export const MAX_NAVIGATION_SAVED_LIMIT = 25;
@@ -191,12 +187,6 @@ export const mcpOptions: McpOptions = {
       'Set to false to disable sending URLs from performance traces to CrUX API to get field performance data.',
     reloadable: true,
   },
-  usageStatistics: {
-    type: 'boolean',
-    default: true,
-    describe:
-      'Set to false to opt-out of usage statistics collection. Google collects usage data to improve the tool, handled under the Google Privacy Policy (https://policies.google.com/privacy). This is independent from Chrome browser metrics. Disabled if `CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS` or `CI` env variables are set.',
-  },
   javascriptEvaluation: {
     type: 'boolean',
     default: true,
@@ -290,7 +280,7 @@ export const mcpOptions: McpOptions = {
     type: 'array',
     string: true,
     alias: 'workspace',
-    default: DEFAULT_FILESYSTEM_ROOT,
+    default: undefined,
     defaultDescription: 'OS temp directory',
     describe:
       'A directory that filesystem tools are allowed to access. May be specified more than once.',
@@ -299,12 +289,6 @@ export const mcpOptions: McpOptions = {
   config: {
     type: 'string',
     describe: 'Path to JSON configuration file.',
-    coerce: (configPath: string | undefined): string | undefined => {
-      if (!configPath) {
-        return;
-      }
-      return path.resolve(configPath);
-    },
   },
   watchConfig: {
     type: 'boolean',
@@ -425,19 +409,14 @@ export const CLI_EXAMPLES: Array<[string, string]> = [
 ];
 
 export const CONFLICTING_ARGS: Array<Array<keyof McpOptions>> = [
-  ['channel', 'executablePath', 'browserUrl', 'wsEndpoint'],
-  ['userDataDir', 'browserUrl', 'wsEndpoint'],
-  ['userDataDir', 'isolated'],
-  ['autoConnect', 'isolated'],
-  ['autoConnect', 'executablePath'],
+  ['executablePath', 'browserUrl', 'wsEndpoint'],
+  ['browserUrl', 'wsEndpoint'],
   ['blockedUrlPattern', 'allowedUrlPattern'],
   ['allowUnrestrictedPaths', 'filesystemRoot'],
-  ['categoryPwa', 'autoConnect'],
   ['categoryPwa', 'browserUrl', 'wsEndpoint'],
 ];
 
 export const IMPLICATIONS: Array<[keyof McpOptions, keyof McpOptions]> = [
-  ['wsHeaders', 'wsEndpoint'],
   ['experimentalFfmpegPath', 'experimentalScreencast'],
 ];
 

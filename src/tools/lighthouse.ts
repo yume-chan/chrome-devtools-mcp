@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import path from 'node:path';
-
 import type {ParsedArguments} from '../config/mcp-options.js';
 import {NetworkOverridesFormatter} from '../formatters/NetworkOverridesFormatter.js';
 
@@ -13,9 +11,9 @@ import {
   generateReport,
   zod,
   type Flags,
+  type OutputMode,
   type Result,
   type RunnerResult,
-  type OutputMode,
 } from '../third_party/index.js';
 
 import {ToolCategory} from './categories.js';
@@ -170,7 +168,7 @@ const getFailedAudits = (lhr: Result): LighthouseFailedAudit[] => {
 export const lighthouseAudit: PageToolFactory = definePageTool(
   (args: ParsedArguments) => ({
     name: 'lighthouse_audit',
-    description: `Get Lighthouse scores, failing audits, and the DOM nodes they flag for accessibility, SEO, best practices, and agentic browsing. Full reports are saved to disk. This excludes performance. For performance audits, run ${startTrace(args).name}`,
+    description: `Get Lighthouse scores, failing audits, and the DOM nodes they flag for accessibility, SEO, best practices, and agentic browsing. Full reports are saved to the in-memory file system. This excludes performance. For performance audits, run ${startTrace(args).name}`,
     annotations: {
       category: ToolCategory.DEBUGGING,
       readOnlyHint: false,
@@ -189,13 +187,13 @@ export const lighthouseAudit: PageToolFactory = definePageTool(
       outputDirPath: zod
         .string()
         .optional()
-        .describe('Directory for reports. If omitted, uses temporary files.'),
+        .describe(
+          'Directory in the in-memory file system for reports. If omitted, temporary files are used.',
+        ),
     },
     blockedByDialog: true,
     concurrency: 'exclusive',
-    verifyFilesSchema: {
-      outputDirPath: true,
-    },
+    verifyFilesSchema: {},
     handler: async (request, response, context) => {
       const page = request.page;
       const categories = [
@@ -276,32 +274,26 @@ export const lighthouseAudit: PageToolFactory = definePageTool(
       }
       const reportPaths: string[] = [];
 
-      const encoder = new TextEncoder();
-      const savePromises = formats.map(async format => {
+      for (const format of formats) {
         const report = await generateReport(lhr, format);
-        const data = encoder.encode(report);
+        const data = new TextEncoder().encode(report);
         if (outputDirPath) {
-          const reportPath = path.join(outputDirPath, `report`);
+          const outputPath = `${outputDirPath.replace(/[\\/]+$/, '')}/report`;
+          const extension =
+            format === 'json' ? '.json' : format === 'csv' ? '.csv' : '.html';
           const {filename} = await context.saveFile(
             data,
-            reportPath,
-            `.${format}`,
+            outputPath,
+            extension,
           );
-          return filename;
+          reportPaths.push(filename);
+        } else {
+          const {filepath} = await context.saveTemporaryFile(
+            data,
+            `report.${format}`,
+          );
+          reportPaths.push(filepath);
         }
-        const {filepath} = await context.saveTemporaryFile(
-          data,
-          `report.${format}`,
-        );
-        return filepath;
-      });
-
-      const results = await Promise.allSettled(savePromises);
-      for (const res of results) {
-        if (res.status === 'rejected') {
-          throw res.reason;
-        }
-        reportPaths.push(res.value);
       }
 
       // Lighthouse sets runtimeError when it could not load the page; the categories are unscored.

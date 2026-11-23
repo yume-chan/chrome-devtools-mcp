@@ -4,13 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {Script} from 'node:vm';
-
 import {
   type TargetUniverse,
   waitForSourceMaps,
 } from './devtools/DevtoolsUtils.js';
-import {DevTools} from './third_party/index.js';
+import {DevTools, parseJavaScript} from './third_party/index.js';
 
 export interface LogpointOptions {
   /**
@@ -118,14 +116,15 @@ export function parseLogpoint(text: string): LogpointOptions {
 }
 
 /**
- * Checks that the expression parses as `console.log()` arguments. V8 is used
- * for parsing both here and in the browser, so an expression that is rejected
- * here would also be rejected as a breakpoint condition. The script is only
- * compiled, never run.
+ * Checks that the expression parses as `console.log()` arguments. The script
+ * is only parsed, never run.
  */
 export function validateExpression(expression: string): void {
   try {
-    new Script(`console.log(${expression})`);
+    parseJavaScript(`console.log(${expression})`, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+    });
   } catch (error) {
     throw new Error(
       `The logpoint expression \`${expression}\` does not compile: ${error instanceof Error ? error.message : String(error)}. Provide the expression like arguments to console.log(...).`,

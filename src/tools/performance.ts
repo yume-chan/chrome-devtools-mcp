@@ -4,34 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import zlib from 'node:zlib';
-
 import type {ParsedArguments} from '../config/mcp-options.js';
-import {zod, DevTools} from '../third_party/index.js';
+import {NetworkOverridesFormatter} from '../formatters/NetworkOverridesFormatter.js';
 import {
   parseRawTraceBuffer,
   traceResultIsSuccess,
   type InsightName,
   type TraceResult,
 } from '../processors/PerformanceTrace.js';
+import {DevTools, zod} from '../third_party/index.js';
 import {logger} from '../utils/logger.js';
-import {NetworkOverridesFormatter} from '../formatters/NetworkOverridesFormatter.js';
 
 import {ToolCategory} from './categories.js';
 import {
   definePageTool,
   type Context,
-  type Response,
   type ContextPage,
   type PageToolFactory,
+  type Response,
 } from './ToolDefinition.js';
-
-const filePathSchema = zod
-  .string()
-  .optional()
-  .describe(
-    'The absolute file path, or a file path relative to the current working directory, to save the raw trace data. For example, trace.json.gz (compressed) or trace.json (uncompressed).',
-  );
 
 export const startTrace: PageToolFactory = definePageTool(() => ({
   name: 'performance_start_trace',
@@ -59,13 +50,16 @@ export const startTrace: PageToolFactory = definePageTool(() => ({
       .describe(
         'Whether to bypass the HTTP cache when reloading the page, to measure a cold page load. Only applies if reload is true. Active network mocks always disable the page HTTP cache.',
       ),
-    filePath: filePathSchema,
+    filePath: zod
+      .string()
+      .optional()
+      .describe(
+        'Path in the in-memory file system to save the raw trace data. Use a .gz extension for gzip compression.',
+      ),
   },
   blockedByDialog: true,
   concurrency: 'exclusive',
-  verifyFilesSchema: {
-    filePath: true,
-  },
+  verifyFilesSchema: {},
   handler: async (request, response, context) => {
     if (context.isRunningPerformanceTrace()) {
       response.appendResponseLine(
@@ -166,13 +160,16 @@ export const stopTrace: PageToolFactory = definePageTool(
       readOnlyHint: false,
     },
     schema: {
-      filePath: filePathSchema,
+      filePath: zod
+        .string()
+        .optional()
+        .describe(
+          'Path in the in-memory file system to save the raw trace data. Use a .gz extension for gzip compression.',
+        ),
     },
     blockedByDialog: true,
     concurrency: 'exclusive',
-    verifyFilesSchema: {
-      filePath: true,
-    },
+    verifyFilesSchema: {},
     handler: async (request, response, context) => {
       if (!context.isRunningPerformanceTrace()) {
         response.appendResponseLine(
@@ -261,25 +258,24 @@ async function stopTracingAndAppendOutput(
   try {
     const traceEventsBuffer = await page.pptrPage.tracing.stop();
     if (filePath && traceEventsBuffer) {
-      let dataToWrite: Uint8Array = traceEventsBuffer;
-      if (filePath.endsWith('.gz')) {
-        dataToWrite = await new Promise((resolve, reject) => {
-          zlib.gzip(traceEventsBuffer, (error, result) => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve(result);
-            }
-          });
-        });
+      let dataToWrite: Uint8Array<ArrayBufferLike> = traceEventsBuffer;
+      const isGzip = filePath.endsWith('.gz');
+      if (isGzip) {
+        const compressedStream = new Blob([Uint8Array.from(traceEventsBuffer)])
+          .stream()
+          .pipeThrough(new CompressionStream('gzip'));
+        const compressed = await new globalThis.Response(
+          compressedStream,
+        ).arrayBuffer();
+        dataToWrite = new Uint8Array(compressed);
       }
-      const file = await context.saveFile(
+      const {filename} = await context.saveFile(
         dataToWrite,
         filePath,
-        filePath.endsWith('.gz') ? '.gz' : '.json',
+        isGzip ? '.gz' : '.json',
       );
       response.appendResponseLine(
-        `The raw trace data was saved to ${file.filename}.`,
+        `The raw trace data was saved to ${filename}.`,
       );
     }
     const result = await parseRawTraceBuffer(traceEventsBuffer, {

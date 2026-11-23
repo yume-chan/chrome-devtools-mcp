@@ -51,7 +51,6 @@ import type {
   DevToolsData,
   MatchedStyles,
   Response,
-  ScreenRecorderData,
   WebAuthnAuthenticatorConfig,
   WebAuthnAuthenticatorState,
 } from './tools/ToolDefinition.js';
@@ -219,9 +218,6 @@ export class McpPage implements ContextPage {
   // Dialog
   #dialog?: Dialog;
   #dialogHandler: (dialog: Dialog) => void;
-
-  // Screencast
-  #screenRecorder: ScreenRecorderData | null = null;
 
   // Performance trace
   #isRunningPerformanceTrace = false;
@@ -608,14 +604,6 @@ export class McpPage implements ContextPage {
     this.#dialog = undefined;
   }
 
-  getScreenRecorder(): ScreenRecorderData | null {
-    return this.#screenRecorder;
-  }
-
-  setScreenRecorder(data: ScreenRecorderData | null): void {
-    this.#screenRecorder = data;
-  }
-
   isRunningPerformanceTrace(): boolean {
     return this.#isRunningPerformanceTrace;
   }
@@ -764,7 +752,6 @@ export class McpPage implements ContextPage {
       return;
     }
     const request = this.networkCollector.find(request => {
-      // @ts-expect-error id is internal.
       return request.id === cdpRequestId;
     });
     if (!request) {
@@ -779,7 +766,6 @@ export class McpPage implements ContextPage {
     if (!request) {
       return undefined;
     }
-    // @ts-expect-error id is internal.
     return request.id;
   }
 
@@ -937,13 +923,6 @@ export class McpPage implements ContextPage {
     this.#disposed = true;
     this.#isRunningPerformanceTrace = false;
     this.disposeCommentBridge();
-    if (this.#screenRecorder) {
-      const {recorder} = this.#screenRecorder;
-      this.#screenRecorder = null;
-      void recorder.stop().catch(e => {
-        logger?.('Failed to stop screencast recording on dispose', e);
-      });
-    }
     this.#pptrPage?.off('dialog', this.#dialogHandler);
     void this.#networkOverrideManager?.dispose();
     this.#networkCollector?.dispose();

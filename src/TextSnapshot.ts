@@ -90,10 +90,8 @@ export class TextSnapshot {
 
     const assignIds = (node: SerializedAXNode): TextSnapshotNode => {
       let id = '';
-      // @ts-expect-error untyped backendNodeId.
       const backendNodeId: number | undefined = node.backendNodeId;
       if (backendNodeId !== undefined) {
-        // @ts-expect-error untyped loaderId.
         const uniqueBackendId = `${node.loaderId}_${backendNodeId}`;
         const existingMcpId = uniqueBackendNodeIdToMcpId.get(uniqueBackendId);
         if (existingMcpId !== undefined) {
@@ -237,6 +235,7 @@ export class TextSnapshot {
         id,
         backendNodeId,
         children: [],
+        loaderId: '',
         elementHandle: async () => handle,
       };
       return extraNode;

@@ -4,24 +4,52 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {isDeepStrictEqual} from 'node:util';
-
-import {yargs} from '../third_party/cli.js';
+import {deepEqual} from '../utils/deepEqual.js';
 
 import {
   CONFLICTING_ARGS,
-  DEFAULT_FILESYSTEM_ROOT,
   IMPLICATIONS,
   isReloadableOption,
   mcpOptions,
   mcpOptionsForViaCli,
-  stripYargsPositionalArgs,
   type McpOptions,
   type ParsedArguments,
 } from './mcp-options.js';
 
+type Environment = Readonly<Record<string, string | undefined>>;
+
+function getEnvironment(): Environment {
+  return typeof process === 'undefined' ? {} : process.env;
+}
+
+function getSystemTempDirectory(): string {
+  if (typeof process === 'undefined') {
+    return '/tmp';
+  }
+  const {TMP, TEMP, TMPDIR, TEMPDIR} = process.env;
+  const tempDirectory =
+    process.platform === 'win32'
+      ? TMP || TEMP
+      : TMPDIR || TMP || TEMP || TEMPDIR;
+  return (
+    tempDirectory ||
+    (process.platform === 'win32' ? 'C:\\Windows\\Temp' : '/tmp')
+  );
+}
+
+export const DEFAULT_FILESYSTEM_ROOT: string[] = [getSystemTempDirectory()];
+
 function isMcpOptionKey(key: string): key is keyof ParsedArguments {
   return key in mcpOptions;
+}
+
+function isParsedArguments(value: object): value is ParsedArguments {
+  for (const key of Object.keys(mcpOptions)) {
+    if (!(key in value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function copyOption<K extends keyof ParsedArguments>(
@@ -67,19 +95,26 @@ function mergeLayer(
 }
 
 function parseDefaultArgs(options: McpOptions): ParsedArguments {
-  const parsed = yargs([])
-    .parserConfiguration({
-      'strip-aliased': true,
-      'camel-case-expansion': false,
-    })
-    .options(options)
-    .parseSync([]);
-  return {
-    ...stripYargsPositionalArgs(parsed),
+  const parsed = Object.fromEntries(
+    Object.entries(options).map(([key, option]) => [
+      key,
+      'default' in option
+        ? option.default
+        : option.type === 'boolean'
+          ? false
+          : undefined,
+    ]),
+  );
+  const resolved = {
+    ...parsed,
     // yargs copies array defaults, so restore the shared reference that the
     // `viaCli` check in `applyDefaults()` compares with `===`.
     filesystemRoot: DEFAULT_FILESYSTEM_ROOT,
   };
+  if (!isParsedArguments(resolved)) {
+    throw new Error('Failed to resolve default server options.');
+  }
+  return resolved;
 }
 
 export interface ReadonlyServerConfig {
@@ -90,7 +125,7 @@ export interface ServerConfigInit {
   cliArgs: Partial<ParsedArguments>;
   fileArgs: Partial<ParsedArguments>;
   configPath?: string;
-  env?: NodeJS.ProcessEnv;
+  env?: Environment;
   resolved: ParsedArguments;
 }
 
@@ -98,7 +133,7 @@ export interface ServerConfigCreateOptions {
   cliArgs: Partial<ParsedArguments>;
   fileArgs: Partial<ParsedArguments>;
   configPath?: string;
-  env?: NodeJS.ProcessEnv;
+  env?: Environment;
   suppressUsageStatisticsNotice?: boolean;
 }
 
@@ -112,15 +147,13 @@ export interface ServerConfigCreateOptions {
 export class ServerConfig implements ReadonlyServerConfig {
   #cliArgs: Readonly<Partial<ParsedArguments>>;
   #fileArgs: Readonly<Partial<ParsedArguments>>;
-  readonly #configPath?: string;
-  readonly #env: NodeJS.ProcessEnv;
+  readonly #env: Environment;
   #resolved: Readonly<ParsedArguments>;
 
   constructor(init: ServerConfigInit) {
     this.#cliArgs = {...init.cliArgs};
     this.#fileArgs = {...init.fileArgs};
-    this.#configPath = init.configPath;
-    this.#env = init.env ?? process.env;
+    this.#env = init.env ?? getEnvironment();
     this.#resolved = {...init.resolved};
   }
 
@@ -168,27 +201,17 @@ export class ServerConfig implements ReadonlyServerConfig {
   static applyDefaults(
     explicitArgs: Partial<ParsedArguments>,
     options?: {
-      env?: NodeJS.ProcessEnv;
+      env?: Environment;
       suppressUsageStatisticsNotice?: boolean;
     },
   ): ParsedArguments {
-    const env = options?.env ?? process.env;
+    const env = options?.env ?? getEnvironment();
     const isViaCli = explicitArgs.viaCli === true;
     const baseOptions = isViaCli ? mcpOptionsForViaCli : mcpOptions;
     const resolvedArgs: ParsedArguments = {
       ...parseDefaultArgs(baseOptions),
       ...filterExplicitArgs(explicitArgs, baseOptions),
     };
-
-    // `channel` only applies when Chrome is launched by channel. Leaving it
-    // unset otherwise keeps it out of telemetry (computeFlagUsage).
-    const launchesByChannel =
-      !resolvedArgs.browserUrl &&
-      !resolvedArgs.wsEndpoint &&
-      !resolvedArgs.executablePath;
-    if (!launchesByChannel && explicitArgs.channel === undefined) {
-      delete resolvedArgs.channel;
-    }
 
     if (isViaCli) {
       resolvedArgs.slim = false;
@@ -201,14 +224,10 @@ export class ServerConfig implements ReadonlyServerConfig {
         resolvedArgs.filesystemRoot = undefined;
       }
       const connectsToExistingBrowser =
-        resolvedArgs.autoConnect ||
         resolvedArgs.browserUrl ||
-        resolvedArgs.wsEndpoint;
-      if (
-        explicitArgs.isolated === undefined &&
-        resolvedArgs.userDataDir === undefined &&
-        !connectsToExistingBrowser
-      ) {
+        resolvedArgs.wsEndpoint ||
+        resolvedArgs.transport;
+      if (explicitArgs.isolated === undefined && !connectsToExistingBrowser) {
         resolvedArgs.isolated = true;
       }
       if (
@@ -217,15 +236,6 @@ export class ServerConfig implements ReadonlyServerConfig {
       ) {
         resolvedArgs.categoryExtensions = true;
       }
-    }
-
-    if (env['CI'] || env['CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS']) {
-      if (!options?.suppressUsageStatisticsNotice) {
-        console.error(
-          "turning off usage statistics. process.env['CI'] || process.env['CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS'] is set.",
-        );
-      }
-      resolvedArgs.usageStatistics = false;
     }
 
     if (
@@ -257,7 +267,6 @@ export class ServerConfig implements ReadonlyServerConfig {
     return new ServerConfig({
       cliArgs: options.cliArgs,
       fileArgs: options.fileArgs,
-      configPath: options.configPath,
       env: options.env,
       resolved,
     });
@@ -269,10 +278,6 @@ export class ServerConfig implements ReadonlyServerConfig {
 
   get fileArgs(): Readonly<Partial<ParsedArguments>> {
     return this.#fileArgs;
-  }
-
-  get configPath(): string | undefined {
-    return this.#configPath;
   }
 
   get resolved(): Readonly<ParsedArguments> {
@@ -287,7 +292,6 @@ export class ServerConfig implements ReadonlyServerConfig {
     return ServerConfig.create({
       cliArgs: {...this.#cliArgs},
       fileArgs,
-      configPath: this.#configPath,
       env: this.#env,
       suppressUsageStatisticsNotice: true,
     });
@@ -300,14 +304,13 @@ export class ServerConfig implements ReadonlyServerConfig {
    */
   mergeReloadable(
     next: ServerConfig,
-    options?: {env?: NodeJS.ProcessEnv},
+    options?: {env?: Environment},
   ): ServerConfig {
     const mergedFileArgs = mergeLayer(this.#fileArgs, next.#fileArgs);
     const mergedCliArgs = mergeLayer(this.#cliArgs, next.#cliArgs);
     return ServerConfig.create({
       cliArgs: mergedCliArgs,
       fileArgs: mergedFileArgs,
-      configPath: this.#configPath,
       env: options?.env ?? this.#env,
       suppressUsageStatisticsNotice: true,
     });
@@ -323,9 +326,9 @@ export class ServerConfig implements ReadonlyServerConfig {
       if (
         isMcpOptionKey(name) &&
         !isReloadableOption(name) &&
-        (!isDeepStrictEqual(this.#fileArgs[name], next.#fileArgs[name]) ||
-          !isDeepStrictEqual(this.#cliArgs[name], next.#cliArgs[name])) &&
-        !isDeepStrictEqual(this.#resolved[name], next.#resolved[name])
+        (!deepEqual(this.#fileArgs[name], next.#fileArgs[name]) ||
+          !deepEqual(this.#cliArgs[name], next.#cliArgs[name])) &&
+        !deepEqual(this.#resolved[name], next.#resolved[name])
       ) {
         changed.push(name);
       }

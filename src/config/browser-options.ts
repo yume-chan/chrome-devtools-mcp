@@ -5,17 +5,15 @@
  */
 
 import type {McpOptionsFor} from './category-options.js';
+import type {ConnectionTransport} from '../third_party';
 
 export interface BrowserArguments {
-  autoConnect: boolean;
   browserUrl?: string;
   wsEndpoint?: string;
-  wsHeaders?: Record<string, string>;
+  transport?: ConnectionTransport;
   headless: boolean;
   executablePath?: string;
   isolated: boolean;
-  userDataDir?: string;
-  channel?: 'canary' | 'dev' | 'beta' | 'stable';
   proxyServer?: string;
   chromeArg?: string[];
   ignoreDefaultChromeArg?: string[];
@@ -24,12 +22,6 @@ export interface BrowserArguments {
 export type BrowserOptions = McpOptionsFor<BrowserArguments>;
 
 export const browserOptions: BrowserOptions = {
-  autoConnect: {
-    type: 'boolean',
-    description:
-      'If specified, automatically connects to a browser (Chrome 144+) running locally from the user data directory identified by the channel param (default channel is stable). Requires the remote debugging server to be started in the Chrome instance via chrome://inspect/#remote-debugging.',
-    default: false,
-  },
   browserUrl: {
     type: 'string',
     description:
@@ -81,37 +73,11 @@ export const browserOptions: BrowserOptions = {
       }
     },
   },
-  wsHeaders: {
+  transport: {
     type: 'string',
     description:
-      'Custom headers for WebSocket connection in JSON format (e.g., \'{"Authorization":"Bearer token"}\'). Only works with --wsEndpoint.',
-    coerce: (val: unknown): Record<string, string> | undefined => {
-      if (!val) {
-        return;
-      }
-      try {
-        const parsed: unknown = typeof val === 'string' ? JSON.parse(val) : val;
-        if (
-          typeof parsed !== 'object' ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          throw new Error('Headers must be a JSON object');
-        }
-        const headers: Record<string, string> = {};
-        for (const [key, value] of Object.entries(parsed)) {
-          if (typeof value !== 'string') {
-            throw new Error(`Header "${key}" must have a string value`);
-          }
-          headers[key] = value;
-        }
-        return headers;
-      } catch (error) {
-        throw new Error(
-          `Invalid JSON for wsHeaders: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    },
+      'Custom transport for connecting to a running Chrome instance.',
+    coerce: () => undefined as never,
   },
   headless: {
     type: 'boolean',
@@ -128,18 +94,6 @@ export const browserOptions: BrowserOptions = {
     description:
       'If specified, creates a temporary user-data-dir that is automatically cleaned up after the browser is closed. Defaults to false.',
     default: false,
-  },
-  userDataDir: {
-    type: 'string',
-    description:
-      'Path to the user data directory for Chrome. Default is $HOME/.cache/chrome-devtools-mcp/chrome-profile$CHANNEL_SUFFIX_IF_NON_STABLE',
-  },
-  channel: {
-    type: 'string',
-    description:
-      'Specify a different Chrome channel that should be used. The default is the stable channel version.',
-    choices: ['canary', 'dev', 'beta', 'stable'],
-    default: 'stable',
   },
   proxyServer: {
     type: 'string',

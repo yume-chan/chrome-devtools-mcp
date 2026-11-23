@@ -12,10 +12,9 @@ import {validateUrl} from '../../utils/url.js';
 
 export const screenshot: PageToolFactory = definePageTool(() => ({
   name: 'screenshot',
-  description: `Takes a png screenshot`,
+  description: 'Takes a PNG screenshot.',
   annotations: {
     category: ToolCategory.DEBUGGING,
-    // Not read-only due to filePath param.
     readOnlyHint: false,
     conditions: ['slim'],
   },
@@ -24,31 +23,28 @@ export const screenshot: PageToolFactory = definePageTool(() => ({
       .string()
       .optional()
       .describe(
-        'The absolute path, or a path relative to the current working directory, to save the screenshot to instead of attaching it to the response.',
+        'Path in the in-memory file system to save the screenshot to instead of attaching it to the response.',
       ),
   },
   blockedByDialog: true,
   concurrency: 'page',
-  verifyFilesSchema: {
-    filePath: true,
-  },
+  verifyFilesSchema: {},
   handler: async (request, response, context) => {
-    const page = request.page;
-    const screenshot = await page.pptrPage.screenshot({
+    const screenshot = await request.page.pptrPage.screenshot({
       type: 'png',
       optimizeForSpeed: true,
     });
     if (request.params.filePath) {
-      const result = await context.saveFile(
+      const {filename} = await context.saveFile(
         screenshot,
         request.params.filePath,
         '.png',
       );
-      response.appendResponseLine(result.filename);
+      response.appendResponseLine(filename);
     } else {
       const {filepath} = await context.saveTemporaryFile(
         screenshot,
-        `screenshot.png`,
+        'screenshot.png',
       );
       response.appendResponseLine(filepath);
     }

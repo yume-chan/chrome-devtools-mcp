@@ -25,6 +25,29 @@ const BYTE_UNITS: Readonly<Record<string, number>> = {
   tib: 1024 * 1024 * 1024 * 1024,
 };
 
+export function encodeBase64(value: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < value.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...value.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}
+
+export function base64ToBase64Url(value: string): string {
+  const binary = atob(value.replaceAll('-', '+').replaceAll('_', '/'));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return encodeBase64(bytes)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
 /**
  * Parses a byte size string (e.g. "1M", "1MB", "500KB", "1.5GB", "1024") into bytes.
  */

@@ -15,12 +15,10 @@ import * as extensionTools from './extensions.js';
 import * as inputTools from './input.js';
 import * as lighthouseTools from './lighthouse.js';
 import * as logpointTools from './logpoints.js';
-import * as memoryTools from './memory.js';
 import * as networkTools from './network.js';
 import * as pagesTools from './pages.js';
 import * as performanceTools from './performance.js';
 import * as pwaTools from './pwa.js';
-import * as screencastTools from './screencast.js';
 import * as screenshotTools from './screenshot.js';
 import * as scriptTools from './script.js';
 import * as slimTools from './slim/tools.js';
@@ -40,12 +38,10 @@ export const createTools = (args: ParsedArguments): AnyToolDefinition[] => {
     ...Object.values(inputTools),
     ...Object.values(lighthouseTools),
     ...Object.values(logpointTools),
-    ...Object.values(memoryTools),
     ...Object.values(networkTools),
     ...Object.values(pagesTools),
     ...Object.values(performanceTools),
     ...Object.values(pwaTools),
-    ...Object.values(screencastTools),
     ...Object.values(screenshotTools),
     ...Object.values(scriptTools),
     ...Object.values(slimTools),

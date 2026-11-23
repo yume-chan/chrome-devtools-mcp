@@ -5,6 +5,7 @@
  */
 
 import type {WebAuthnAuthenticatorState} from '../tools/ToolDefinition.js';
+import {base64ToBase64Url} from '../utils/bytes.js';
 
 function formatAuthenticator(
   authenticator: WebAuthnAuthenticatorState,
@@ -49,9 +50,7 @@ export class WebAuthnFormatter {
       credentials: this.#authenticator.credentials.map(credential => ({
         ...credential,
         // Match PublicKeyCredential.id, which the page sees as base64url.
-        credentialId: Buffer.from(credential.credentialId, 'base64').toString(
-          'base64url',
-        ),
+        credentialId: base64ToBase64Url(credential.credentialId),
       })),
     };
   }

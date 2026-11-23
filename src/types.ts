@@ -13,7 +13,7 @@ import type {
 export interface TextSnapshotNode extends SerializedAXNode {
   id: string;
   backendNodeId?: number;
-  loaderId?: string;
+  loaderId: string;
   children: TextSnapshotNode[];
 }
 

@@ -8,10 +8,27 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
 import {
+  base64ToBase64Url,
   byteSizeRangeSchema,
+  encodeBase64,
   parseByteSize,
   parseByteSizeRange,
 } from '../../src/utils/bytes.js';
+
+describe('encodeBase64', () => {
+  it('encodes byte arrays with the Web API', () => {
+    assert.strictEqual(
+      encodeBase64(new Uint8Array([0, 1, 2, 253, 254, 255])),
+      'AAEC/f7/',
+    );
+  });
+});
+
+describe('base64ToBase64Url', () => {
+  it('converts standard base64 to unpadded base64url', () => {
+    assert.strictEqual(base64ToBase64Url('Bq4IsoJ+lZuj/w=='), 'Bq4IsoJ-lZuj_w');
+  });
+});
 
 describe('parseByteSize', () => {
   it('should parse plain numeric strings', () => {

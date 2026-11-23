@@ -4,14 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-const DESCRIPTIONS_PATH = path.join(
-  import.meta.dirname,
-  '../third_party/issue-descriptions',
-);
-
 let issueDescriptions: Record<string, string> = {};
 
 /**
@@ -22,23 +14,15 @@ export async function loadIssueDescriptions(): Promise<void> {
     return;
   }
 
-  const files = await fs.promises.readdir(DESCRIPTIONS_PATH);
-  const descriptions: Record<string, string> = {};
-
-  const results = await Promise.all(
-    files
-      .filter(file => file.endsWith('.md'))
-      .map(async file => {
-        const content = await fs.promises.readFile(
-          path.join(DESCRIPTIONS_PATH, file),
-          'utf-8',
-        );
-        return {file, content};
-      }),
+  // @ts-expect-error
+  const index = await import('../third_party/issue-descriptions/index.js').then(
+    mod => mod.default as Record<string, string>,
   );
 
-  for (const {file, content} of results) {
-    descriptions[file] = content;
+  const descriptions: Record<string, string> = {};
+
+  for (const file in index) {
+    descriptions[file] = index[file];
   }
 
   issueDescriptions = descriptions;

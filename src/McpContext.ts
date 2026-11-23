@@ -4,25 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
-import {isDeepStrictEqual} from 'node:util';
-
-import {overrideDevToolsGlobals} from './devtools/DevtoolsUtils.js';
-import type {
-  HeapSnapshotManager,
-  HeapSnapshotAggregateData,
-  HeapSnapshotDiff,
-  HeapSnapshotDetailedClassDiff,
-  DuplicateStringGroup,
-  HeapEdgesQueryOptions,
-  HeapQueryOptions,
-} from './processors/HeapSnapshotManager.js';
-import {McpPage} from './McpPage.js';
 import type {UncaughtError} from './collectors/PageCollector.js';
 import {ServiceWorkerConsoleCollector} from './collectors/ServiceWorkerCollector.js';
+import type {ParsedArguments} from './config/mcp-options.js';
+import type {ReadonlyServerConfig} from './config/ServerConfig.js';
+import {overrideDevToolsGlobals} from './devtools/DevtoolsUtils.js';
+import {McpPage} from './McpPage.js';
+import {McpWorker} from './McpWorker.js';
+import type {TraceResult} from './processors/PerformanceTrace.js';
 import {
   Locator,
   Mutex,
@@ -30,6 +19,7 @@ import {
   type BrowserContext,
   type Connection,
   type ConsoleMessage,
+  type Extension,
   type GetPWAStateOptions,
   type InstallPWAOptions,
   type LaunchPWAOptions,
@@ -38,12 +28,7 @@ import {
   type PWAState,
   type Target,
   type UninstallPWAOptions,
-  type Extension,
-  type Root,
-  type DevTools,
 } from './third_party/index.js';
-import type {ParsedArguments} from './config/mcp-options.js';
-import type {ReadonlyServerConfig} from './config/ServerConfig.js';
 import {ToolCategory} from './tools/categories.js';
 import {
   CLOSE_PAGE_ERROR,
@@ -54,11 +39,16 @@ import {
   type DevToolsData,
   type SupportedExtensions,
 } from './tools/ToolDefinition.js';
-import type {TraceResult} from './processors/PerformanceTrace.js';
 import type {Logger} from './types.js';
-import {McpWorker} from './McpWorker.js';
-import {getTempFilePath, resolveCanonicalPath} from './utils/files.js';
-import {escapeForLog, redactUrlForLogging} from './utils/logger.js';
+import {redactUrlForLogging} from './utils/logger.js';
+import {
+  getMemoryTempFilePath,
+  normalizeMemoryFileUrl,
+  normalizeMemoryPath,
+  readMemoryFile,
+  writeMemoryFile,
+} from './utils/memfs.js';
+import {deepEqual} from './utils/deepEqual.js';
 import {
   fetchWithValidatedRedirects,
   validateUrlNotBlocked,
@@ -71,7 +61,6 @@ export interface McpContextOptions {
   // Custom navigation timeout in milliseconds to override default.
   navigationTimeout?: number;
   // Shared heap snapshot manager to preserve loaded snapshots across browser reconnects.
-  heapSnapshotManager: HeapSnapshotManager;
   // Creates the context queue and the page queues.
   taskRunner: TaskRunner;
   // Returns the browser to use. Called by ensureBrowser(), so the browser
@@ -99,7 +88,7 @@ function hasOptionChanged(
   nextArgs: ParsedArguments,
 ): boolean {
   return gate.options.some(
-    option => !isDeepStrictEqual(nextArgs[option], previousArgs[option]),
+    option => !deepEqual(nextArgs[option], previousArgs[option]),
   );
 }
 
@@ -115,14 +104,6 @@ const FEATURE_CONTROLLERS: readonly FeatureController[] = [
   {
     gate: {options: ['experimentalIncludeAllPages']},
     onChange: context => context.createPagesSnapshot(),
-  },
-  {
-    gate: {category: ToolCategory.DEBUGGING},
-    onDisable: context => context.releaseScreencasts(),
-  },
-  {
-    gate: {category: ToolCategory.MEMORY, conditions: ['memoryDebugging']},
-    onDisable: context => context.releaseHeapSnapshots(),
   },
   {
     gate: {category: ToolCategory.PERFORMANCE},
@@ -187,9 +168,6 @@ export class McpContext implements Context, BrowserlessContext {
   #locatorClass: typeof Locator;
   #config: ReadonlyServerConfig;
   #options: McpContextOptions;
-  #heapSnapshotManager: HeapSnapshotManager;
-  #roots: Root[] | undefined = undefined;
-
   private constructor(
     logger: Logger,
     options: McpContextOptions,
@@ -207,7 +185,6 @@ export class McpContext implements Context, BrowserlessContext {
     this.taskQueue = options.taskRunner.createQueue();
     this.#config = options.config;
     this.#options = options;
-    this.#heapSnapshotManager = options.heapSnapshotManager;
   }
 
   /**
@@ -274,41 +251,6 @@ export class McpContext implements Context, BrowserlessContext {
   syncSourceMaps(): void {
     for (const mcpPage of this.#allMcpPages()) {
       mcpPage.syncSourceMaps();
-    }
-  }
-
-  /**
-   * Stops and saves active screencast recordings across all pages when
-   * screencast tools are disabled.
-   */
-  async releaseScreencasts(): Promise<void> {
-    for (const mcpPage of this.#allMcpPages()) {
-      const screenRecorderData = mcpPage.getScreenRecorder();
-      if (!screenRecorderData) {
-        continue;
-      }
-      const {recorder, filePath} = screenRecorderData;
-      mcpPage.setScreenRecorder(null);
-      try {
-        await recorder.stop();
-        this.logger?.(
-          `The screencast recording was stopped and saved to ${filePath} because screencast tools were disabled.`,
-        );
-      } catch (err) {
-        this.logger?.('Failed to stop the screencast recording', err);
-      }
-    }
-  }
-
-  /**
-   * Closes all loaded heap snapshots when memory tools are disabled.
-   */
-  releaseHeapSnapshots(): void {
-    if (this.#heapSnapshotManager.hasSnapshots()) {
-      this.#heapSnapshotManager.dispose();
-      this.logger?.(
-        'Loaded heap snapshots were closed because memory tools were disabled.',
-      );
     }
   }
 
@@ -466,124 +408,6 @@ export class McpContext implements Context, BrowserlessContext {
 
   static resetWorkerIdsForTesting(): void {
     McpWorker.resetIdsForTesting();
-  }
-
-  roots(): Root[] {
-    return [
-      ...(this.#roots ?? []),
-      {
-        uri: pathToFileURL(os.tmpdir()).href,
-        name: 'temp',
-      },
-    ];
-  }
-
-  setRoots(roots: Root[] | undefined): void {
-    this.#roots = roots;
-  }
-
-  /**
-   * Validates that the filePath is allowed according to the roots configuration.
-   * Tolerates if parts of the filePath do not exist yet but the file access to
-   * the resolved should only be allowed without following symlinks.
-   */
-  async validatePath(filePath: string): Promise<string>;
-  async validatePath(filePath?: undefined): Promise<undefined>;
-  async validatePath(filePath?: string): Promise<string | undefined>;
-  async validatePath(filePath?: string): Promise<string | undefined> {
-    if (filePath === undefined) {
-      return undefined;
-    }
-
-    let canonicalPath: string;
-
-    try {
-      canonicalPath = await resolveCanonicalPath(filePath);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[MCP Context] Error resolving real path for ${escapeForLog(filePath)}: ${escapeForLog(errMsg)}`,
-      );
-      throw new Error(
-        `Access denied: Cannot resolve base path for ${escapeForLog(filePath)}.`,
-      );
-    }
-
-    // If the client never negotiated roots and the operator has explicitly
-    // opted into unrestricted access via --allow-unrestricted-paths, restore
-    // the previous permissive behavior and skip validation.
-    if (
-      this.#roots === undefined &&
-      this.#config.resolved.allowUnrestrictedPaths
-    ) {
-      // Canonical path might not exist yet so we fallback to
-      // path.resolve(filePath). Consumers should not follow symlinks.
-      return canonicalPath || path.resolve(filePath);
-    }
-    // roots() always returns at least the temp directory, even if the
-    // connecting client never negotiated the optional `roots` capability.
-    // Path validation must not be skipped just because no workspace roots
-    // were configured.
-    const roots = this.roots();
-
-    let allowed = false;
-    const resolvedRoots = await Promise.allSettled(
-      roots.map(async root => {
-        const rootPathUri = root.uri;
-        const rootPath = path.resolve(fileURLToPath(rootPathUri));
-        return await fs.realpath(rootPath);
-      }),
-    );
-
-    for (let i = 0; i < roots.length; i++) {
-      const root = roots[i];
-      const result = resolvedRoots[i];
-
-      if (result.status === 'fulfilled') {
-        const canonicalRoot = result.value;
-        // A filesystem root such as `/` or `C:\` already ends with the
-        // separator; appending another one would match no path below it.
-        const rootPrefix = canonicalRoot.endsWith(path.sep)
-          ? canonicalRoot
-          : canonicalRoot + path.sep;
-        if (
-          canonicalPath === canonicalRoot ||
-          canonicalPath.startsWith(rootPrefix)
-        ) {
-          allowed = true;
-          break;
-        }
-      } else {
-        const rootErr = result.reason;
-        const errMsg =
-          rootErr instanceof Error ? rootErr.message : String(rootErr);
-        console.warn(
-          `[MCP Context] Could not resolve configured root ${escapeForLog(root.uri)}: ${escapeForLog(errMsg)}`,
-        );
-        // Skip this root if it cannot be resolved.
-      }
-    }
-
-    if (!allowed) {
-      throw new Error(
-        `Access denied: path ${escapeForLog(filePath)} (canonical: ${escapeForLog(canonicalPath)}) is not within any of the configured workspace roots.`,
-      );
-    }
-
-    return canonicalPath || path.resolve(filePath);
-  }
-
-  async ensureExtension<Extension extends `.${string}`>(
-    filePath: string,
-    extension: Extension,
-  ): Promise<`${string}${Extension}`> {
-    const resolved = await this.validatePath(filePath);
-    const currentExtension = path.extname(resolved);
-    const outputPath: `${string}${Extension}` = `${resolved.slice(
-      0,
-      resolved.length - currentExtension.length,
-    )}${extension}`;
-    return outputPath;
   }
 
   async newPage(
@@ -1005,41 +829,31 @@ export class McpContext implements Context, BrowserlessContext {
     return this.#workers.values().find(worker => worker.id === id);
   }
 
-  async #writeFile(
-    filepath: string,
-    data: Uint8Array<ArrayBufferLike>,
-  ): Promise<void> {
-    const resolved = await this.validatePath(filepath);
+  async validatePath(filePath: string): Promise<string> {
+    return normalizeMemoryPath(filePath);
+  }
 
-    try {
-      await fs.mkdir(path.dirname(resolved), {recursive: true});
-      // Open the file with flags to:
-      // - O_WRONLY: Write-only
-      // - O_CREAT: Create if it doesn't exist
-      // - O_TRUNC: Truncate to zero length if it exists
-      // - O_NOFOLLOW: DO NOT follow symlinks.
-      // - 0o600: Permissions: read/write for owner, no permissions for others.
-      await fs.writeFile(resolved, data, {
-        flag:
-          fs.constants.O_WRONLY |
-          fs.constants.O_CREAT |
-          fs.constants.O_TRUNC |
-          fs.constants.O_NOFOLLOW,
-        mode: 0o600,
-      });
-    } catch (err) {
-      throw new Error(`Could not write ${escapeForLog(filepath)}`, {
-        cause: err,
-      });
-    }
+  async ensureExtension<Extension extends `.${string}`>(
+    filePath: string,
+    extension: Extension,
+  ): Promise<`${string}${Extension}`> {
+    const resolved = await this.validatePath(filePath);
+    const separator = resolved.lastIndexOf('/');
+    const dot = resolved.lastIndexOf('.');
+    const currentExtension = dot > separator ? resolved.slice(dot) : '';
+    return `${resolved.slice(0, resolved.length - currentExtension.length)}${extension}`;
+  }
+
+  async readFile(filePath: string): Promise<Uint8Array> {
+    return await readMemoryFile(await this.validatePath(filePath));
   }
 
   async saveTemporaryFile(
     data: Uint8Array<ArrayBufferLike>,
     filename: string,
   ): Promise<{filepath: string}> {
-    const filepath = await getTempFilePath(filename);
-    await this.#writeFile(filepath, data);
+    const filepath = getMemoryTempFilePath(filename);
+    await writeMemoryFile(filepath, data);
     return {filepath};
   }
 
@@ -1052,7 +866,7 @@ export class McpContext implements Context, BrowserlessContext {
       clientProvidedFilePath,
       extension,
     );
-    await this.#writeFile(filePath, data);
+    await writeMemoryFile(filePath, data);
     return {filename: filePath};
   }
 
@@ -1107,118 +921,6 @@ export class McpContext implements Context, BrowserlessContext {
     return pptrExtensions.get(id);
   }
 
-  async getHeapSnapshotAggregates(
-    filePath: string,
-    filterName?: string,
-    objectId?: number,
-  ): Promise<HeapSnapshotAggregateData> {
-    return await this.#heapSnapshotManager.getAggregates(
-      filePath,
-      filterName,
-      objectId,
-    );
-  }
-
-  async getHeapSnapshotDuplicateStrings(
-    filePath: string,
-  ): Promise<DuplicateStringGroup[]> {
-    return await this.#heapSnapshotManager.getDuplicateStrings(filePath);
-  }
-
-  async queryHeapSnapshotObjects(
-    filePath: string,
-    options: HeapQueryOptions,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
-    return await this.#heapSnapshotManager.queryObjects(filePath, options);
-  }
-
-  async getHeapSnapshotStats(
-    filePath: string,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.Statistics> {
-    return await this.#heapSnapshotManager.getStats(filePath);
-  }
-
-  async getHeapSnapshotStaticData(
-    filePath: string,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.StaticData | null> {
-    return await this.#heapSnapshotManager.getStaticData(filePath);
-  }
-
-  async getHeapSnapshotNativeContextSizes(
-    filePath: string,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.NativeContextSizes> {
-    return await this.#heapSnapshotManager.getNativeContextSizes(filePath);
-  }
-
-  async getHeapSnapshotRetainedByContextSummary(
-    filePath: string,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainedByContextSummary> {
-    return await this.#heapSnapshotManager.getRetainedByContextSummary(
-      filePath,
-    );
-  }
-
-  async getHeapSnapshotNodesById(
-    filePath: string,
-    id: number,
-    filterName?: string,
-    objectId?: number,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
-    return await this.#heapSnapshotManager.getNodesById(
-      filePath,
-      id,
-      filterName,
-      objectId,
-    );
-  }
-
-  async getHeapSnapshotRetainers(
-    filePath: string,
-    nodeId: number,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
-    return await this.#heapSnapshotManager.getRetainers(filePath, nodeId);
-  }
-
-  async getHeapSnapshotObjectDetails(
-    filePath: string,
-    nodeId: number,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ObjectInfo> {
-    return await this.#heapSnapshotManager.getObjectInfo(filePath, nodeId);
-  }
-
-  async analyzeHeapSnapshotContexts(
-    filePath: string,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ContextAnalysisResult> {
-    return await this.#heapSnapshotManager.analyzeContexts(filePath);
-  }
-
-  async closeHeapSnapshot(filePath: string): Promise<boolean> {
-    return await this.#heapSnapshotManager.disposeSnapshot(filePath);
-  }
-
-  async getHeapSnapshotRetainingPaths(
-    filePath: string,
-    nodeId: number,
-    maxDepth?: number,
-    maxNodes?: number,
-    maxSiblings?: number,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.RetainingPaths> {
-    return await this.#heapSnapshotManager.getRetainingPaths(
-      filePath,
-      nodeId,
-      maxDepth,
-      maxNodes,
-      maxSiblings,
-    );
-  }
-
-  async getHeapSnapshotDominators(
-    filePath: string,
-    nodeId: number,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.DominatorChain> {
-    return await this.#heapSnapshotManager.getDominatorsOf(filePath, nodeId);
-  }
-
   async #loadNetworkResource(url: URL): Promise<string> {
     const response = await fetchWithValidatedRedirects(url, {
       policy: this.#config.resolved,
@@ -1233,7 +935,18 @@ export class McpContext implements Context, BrowserlessContext {
   }
 
   async loadResource(path: string): Promise<string> {
-    const url = new URL(path);
+    let url: URL | undefined;
+    try {
+      url = new URL(path);
+    } catch {
+      return new TextDecoder().decode(await this.readFile(path));
+    }
+
+    if (url.protocol === 'file:') {
+      return new TextDecoder().decode(
+        await readMemoryFile(normalizeMemoryFileUrl(path)),
+      );
+    }
 
     validateUrlNotBlocked(url, this.#config.resolved.blockedUrlPattern);
 
@@ -1243,43 +956,8 @@ export class McpContext implements Context, BrowserlessContext {
         return await this.#loadNetworkResource(url);
       }
 
-      case 'file:': {
-        const resolved = await this.validatePath(fileURLToPath(url));
-        return await fs.readFile(resolved, 'utf-8');
-      }
-
       default:
         throw new Error(`Unsupported protocol for: ${url}`);
     }
-  }
-
-  async getHeapSnapshotEdges(
-    filePath: string,
-    nodeId: number,
-    options?: HeapEdgesQueryOptions,
-  ): Promise<DevTools.HeapSnapshotModel.HeapSnapshotModel.ItemsRange> {
-    return await this.#heapSnapshotManager.getEdges(filePath, nodeId, options);
-  }
-
-  async getHeapSnapshotClassDiffs(
-    baseFilePath: string,
-    currentFilePath: string,
-  ): Promise<HeapSnapshotDiff> {
-    return await this.#heapSnapshotManager.getClassDiffs(
-      baseFilePath,
-      currentFilePath,
-    );
-  }
-
-  async getHeapSnapshotDetailedClassDiff(
-    baseFilePath: string,
-    currentFilePath: string,
-    classIndex: number,
-  ): Promise<HeapSnapshotDetailedClassDiff> {
-    return await this.#heapSnapshotManager.getDetailedClassDiff(
-      baseFilePath,
-      currentFilePath,
-      classIndex,
-    );
   }
 }

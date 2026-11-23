@@ -8,10 +8,8 @@ import assert from 'node:assert';
 import process from 'node:process';
 import {afterEach, beforeEach, describe, it, mock} from 'node:test';
 
-import {
-  getErrorMessage,
-  setupUnhandledRejectionHandler,
-} from '../../src/utils/errorHandling.js';
+import {getErrorMessage} from '../../src/utils/errorHandling.js';
+import {setupUnhandledRejectionHandler} from '../../src/utils/unhandledRejection.js';
 
 describe('getErrorMessage', () => {
   it('returns the message for Error instances', () => {
