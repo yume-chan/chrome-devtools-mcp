@@ -9,7 +9,7 @@ import 'core-js/modules/es.set.union.v2.js';
 import 'core-js/proposals/iterator-helpers.js';
 
 import type {Flags, OutputMode, Result, RunnerResult} from 'lighthouse';
-import type {Page} from 'puppeteer-core/internal/puppeteer-core-browser.js';
+import type {Page} from 'puppeteer-core';
 
 // eslint-disable-next-line no-restricted-imports
 import * as DevToolsRoot from '../../third_party/devtools-frontend/front_end/core/root/root.js';
@@ -29,10 +29,6 @@ export {
   ProtocolErrorCode,
   type RegisteredTool,
 } from '@modelcontextprotocol/server';
-export {
-  StdioServerTransport,
-  serveStdio,
-} from '@modelcontextprotocol/server/stdio';
 export type {Transport} from '@modelcontextprotocol/server';
 export {
   type CallToolResult,
@@ -61,7 +57,6 @@ export {
   Frame,
   Locator,
   PredefinedNetworkConditions,
-  KnownDevices,
   CDPSession,
   CDPSessionEvent,
   Connection,
@@ -72,8 +67,8 @@ export {
   WebWorker,
   WebMCP,
   WebMCPTool,
-} from 'puppeteer-core/internal/puppeteer-core-browser.js';
-export {default as puppeteer} from 'puppeteer-core/internal/puppeteer-core-browser.js';
+} from 'puppeteer-core';
+export {default as puppeteer} from 'puppeteer-core';
 export type * from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 export {CdpBrowser} from 'puppeteer-core/internal/cdp/Browser.js';
 export {CdpFrame} from 'puppeteer-core/internal/cdp/Frame.js';

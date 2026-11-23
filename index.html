@@ -1,9 +1,12 @@
 <script type="importmap">
   {
     "imports": {
-      "./out/Default/gen/src/third_party/index.js": "./out/Default/gen/src/third_party/browser-index.js",
       "./out/Default/gen/src/utils/memfs.js": "./out/Default/gen/src/utils/memfs-browser.js",
       "@modelcontextprotocol/server/_shims": "./node_modules/@modelcontextprotocol/server/dist/shimsBrowser.mjs",
+      "@modelcontextprotocol/server": "./node_modules/@modelcontextprotocol/server/dist/index.mjs",
+      "@modelcontextprotocol/server/": "./node_modules/@modelcontextprotocol/server/dist/",
+      "@modelcontextprotocol/core": "./node_modules/@modelcontextprotocol/core/dist/index.mjs",
+      "@modelcontextprotocol/core/": "./node_modules/@modelcontextprotocol/core/dist/",
       "@modelcontextprotocol/client": "https://unpkg.com/@modelcontextprotocol/client@2.4.0/dist/index.mjs",
       "@modelcontextprotocol/client/_shims": "https://unpkg.com/@modelcontextprotocol/client@2.4.0/dist/shimsBrowser.mjs",
       "@modelcontextprotocol/core/internal": "https://unpkg.com/@modelcontextprotocol/core@2.4.0/dist/internal.mjs",
@@ -11,7 +14,18 @@
       "eventsource-parser": "https://unpkg.com/eventsource-parser@3.1.1/dist/index.js",
       "eventsource-parser/stream": "https://unpkg.com/eventsource-parser@3.1.1/dist/stream.js",
       "pkce-challenge": "https://unpkg.com/pkce-challenge@5.0.1/dist/index.browser.js",
-      "zod/v4": "https://unpkg.com/zod@4.6.7/v4/index.js"
+      "zod": "./node_modules/zod/index.js",
+      "zod/": "./node_modules/zod/",
+      "zod/v4": "https://unpkg.com/zod@4.6.7/v4/index.js",
+      "ajv": "https://esm.unpkg.com/ajv@8.20.0",
+      "core-js/": "https://esm.unpkg.com/core-js@3.51.0/",
+      "puppeteer-core": "./node_modules/puppeteer-core/lib/puppeteer/puppeteer-core-browser.js",
+      "puppeteer-core/internal/": "./node_modules/puppeteer-core/lib/puppeteer/",
+      "puppeteer-core/": "./node_modules/puppeteer-core/",
+      "urlpattern-polyfill": "./node_modules/urlpattern-polyfill/dist/urlpattern.js",
+      "rxjs": "https://esm.unpkg.com/rxjs@7.8.2/dist/esm5/index.js",
+      "mitt": "./node_modules/mitt/dist/mitt.mjs",
+      "parsel-js": "./node_modules/parsel-js/dist/parsel.js"
     },
     "scopes": {
       "./node_modules/@modelcontextprotocol/client/": {

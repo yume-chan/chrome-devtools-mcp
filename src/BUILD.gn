@@ -64,6 +64,55 @@ template("third_party_bundle") {
   if (defined(invoker.output_file_name)) {
     _output_file_name = invoker.output_file_name
   }
+  _npm_external = [
+    "@blackwell-systems/gcf",
+    "@google/genai",
+    "@modelcontextprotocol/client",
+    "@modelcontextprotocol/core",
+    "@modelcontextprotocol/server",
+    "@puppeteer/browsers",
+    "@stylistic/eslint-plugin",
+    "@toon-format/toon",
+    "@types/node",
+    "@types/semver",
+    "@types/sinon",
+    "@types/yargs",
+    "@typescript-eslint/eslint-plugin",
+    "@typescript-eslint/parser",
+    "ajv",
+    "core-js",
+    "eslint",
+    "eslint-import-resolver-typescript",
+    "eslint-plugin-eslint-plugin",
+    "eslint-plugin-import",
+    "eslint-plugin-jsdoc",
+    "eslint-plugin-mocha",
+    "eventsource",
+    "eventsource-parser",
+    "globals",
+    "jose",
+    "json-schema",
+    "lighthouse",
+    "memfs",
+    "modern-tar",
+    "pkce-challenge",
+    "prettier",
+    "proxy-agent",
+    "puppeteer",
+    "puppeteer-core",
+    "semver",
+    "sinon",
+    "typescript",
+    "typescript-eslint",
+    "yargs",
+    "yauzl",
+    "zod",
+  ]
+  if (defined(invoker.external)) {
+    _external = invoker.external + _npm_external
+  } else {
+    _external = _npm_external
+  }
 
   bundle(target_name) {
     entrypoint = "third_party/${invoker.entrypoint_name}.ts"
@@ -78,48 +127,18 @@ template("third_party_bundle") {
     ]
     forward_variables_from(invoker,
                            [
-                             "external",
                              "node_require_shim",
                            ])
+    external = _external
   }
 }
 
 third_party_bundle("third_party_index_bundle") {
   entrypoint_name = "index"
-  node_require_shim = true
+  output_file_name = "index.js"
   external = [
-    # Puppeteer loads WebDriver BiDi support only on request. The path is
-    # relative to src/third_party, like every relative entry.
-    "../../node_modules/puppeteer-core/lib/puppeteer/bidi/bidi.js",
-
-    # Puppeteer uses the Node launch-options module only for channel launches.
-    # Separate files in the same directory.
-    "./lighthouse-devtools-mcp-bundle.js",
-
-    # Optional peer dependencies.
-    "@blackwell-systems/gcf",
-    "@toon-format/toon",
-
-    # Optional dependencies of @puppeteer/browsers.
-    "modern-tar",
-    "proxy-agent",
-    "yargs",
-    "yauzl",
-  ]
-}
-
-third_party_bundle("third_party_browser_index_bundle") {
-  entrypoint_name = "index"
-  output_file_name = "browser-index.js"
-  external = [
-    "../../node_modules/puppeteer-core/lib/puppeteer/bidi/bidi.js",
     "../../third_party/devtools-frontend/front_end/core/platform/node/node.js",
-    "../../node_modules/puppeteer-core/lib/puppeteer/node/LaunchOptions.js",
     "./lighthouse-devtools-mcp-bundle.js",
-    "@blackwell-systems/gcf",
-    "@modelcontextprotocol/server/_shims",
-    "@puppeteer/browsers",
-    "@toon-format/toon",
   ]
 }
 
@@ -138,7 +157,7 @@ action("third_party_notices") {
   _script = "//scripts/generate-third-party-notices.ts"
   _third_party_gen_dir = "$target_gen_dir/third_party"
   _bundles = [
-    "third_party_browser_index_bundle",
+    "third_party_index_bundle",
     "third_party_formatter_worker_bundle",
     "third_party_heap_snapshot_worker_bundle",
     "third_party_index_bundle",
@@ -279,7 +298,7 @@ group("all") {
     ":lighthouse_bundle",
     ":mcp_lib",
     ":third_party",
-    ":third_party_browser_index_bundle",
+    ":third_party_index_bundle",
     ":third_party_formatter_worker_bundle",
     ":third_party_heap_snapshot_worker_bundle",
     ":third_party_index_bundle",

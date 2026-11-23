@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {WebMCPTool} from 'puppeteer-core/internal/puppeteer-core-browser.js';
+import type {WebMCPTool} from 'puppeteer-core';
 
 import {UncaughtError} from './collectors/PageCollector.js';
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';

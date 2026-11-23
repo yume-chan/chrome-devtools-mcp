@@ -22,13 +22,13 @@ import type {
 } from './processors/HeapSnapshotManager.js';
 import type {TraceResult} from './processors/PerformanceTrace.js';
 import {
-  DevTools,
   Locator,
   Mutex,
   type Browser,
   type BrowserContext,
   type Connection,
   type ConsoleMessage,
+  type DevTools,
   type Extension,
   type GetPWAStateOptions,
   type InstallPWAOptions,

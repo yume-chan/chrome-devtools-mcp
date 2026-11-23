@@ -59,7 +59,10 @@ changed file, not its transitive dependencies.
   excluded daemon, telemetry, heap-snapshot, memory, and screencast sources
   from the MCP library target. Also removed ConfigLocator, ConfigParser,
   ConfigWatcher, the CLI bundle, and the CLI/Config build targets from
-  browser-facing targets. Performance tools are included again.
+  browser-facing targets. The shared third-party bundle template now
+  externalizes npm package specifiers across Node and browser bundles while
+  leaving `third_party/devtools-frontend` relative imports bundled.
+  Performance tools are included again.
 - [scripts/copy-issue-descriptions.ts](./scripts/copy-issue-descriptions.ts)
   — Node: Yes (`node:fs`, `node:path`, `process.argv`; build-time only).
   Copies the descriptions and generates `index.js` with their filenames for
@@ -274,6 +277,10 @@ changed file, not its transitive dependencies.
 - `npm run build` — passed.
 - Heap snapshot build — `npm run build` passed after restoring the memory tool
   registration, manager, context integration, and response formatting.
+- Dependency bundle build — `npm run build` passed with npm packages externalized
+  in the Node and browser third-party bundles. Metafile checks found no
+  `node_modules` inputs: the browser bundle kept 512 DevTools submodule inputs
+  bundled.
 - Browser — reloaded the generated `src/index.js` graph with the browser
   bundles and memfs adapter import mappings. `globalThis.serverConfig` is a
   `ServerConfig` instance. The raw List pages button and MCP client both
