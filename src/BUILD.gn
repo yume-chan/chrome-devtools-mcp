@@ -123,11 +123,6 @@ third_party_bundle("third_party_browser_index_bundle") {
   ]
 }
 
-third_party_bundle("third_party_cli_bundle") {
-  entrypoint_name = "cli"
-  node_require_shim = true
-}
-
 third_party_bundle("third_party_formatter_worker_bundle") {
   entrypoint_name = "devtools-formatter-worker"
 }
@@ -143,7 +138,6 @@ action("third_party_notices") {
   _script = "//scripts/generate-third-party-notices.ts"
   _third_party_gen_dir = "$target_gen_dir/third_party"
   _bundles = [
-    "third_party_cli_bundle",
     "third_party_browser_index_bundle",
     "third_party_formatter_worker_bundle",
     "third_party_heap_snapshot_worker_bundle",
@@ -197,9 +191,6 @@ ts_library("mcp_lib") {
     "collectors/PageCollector.ts",
     "collectors/ServiceWorkerCollector.ts",
     "collectors/constants.ts",
-    "config/ConfigLocator.ts",
-    "config/ConfigParser.ts",
-    "config/ConfigWatcher.ts",
     "config/ServerConfig.ts",
     "config/browser-options.ts",
     "config/category-options.ts",
@@ -286,7 +277,6 @@ group("all") {
     ":lighthouse_bundle",
     ":mcp_lib",
     ":third_party",
-    ":third_party_cli_bundle",
     ":third_party_browser_index_bundle",
     ":third_party_formatter_worker_bundle",
     ":third_party_heap_snapshot_worker_bundle",

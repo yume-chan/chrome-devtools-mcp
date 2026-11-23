@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {deepEqual} from '../utils/deepEqual.js';
+import {isDeepStrictEqual} from '../utils/deepEqual.js';
 
 import {
   CONFLICTING_ARGS,
@@ -326,9 +326,9 @@ export class ServerConfig implements ReadonlyServerConfig {
       if (
         isMcpOptionKey(name) &&
         !isReloadableOption(name) &&
-        (!deepEqual(this.#fileArgs[name], next.#fileArgs[name]) ||
-          !deepEqual(this.#cliArgs[name], next.#cliArgs[name])) &&
-        !deepEqual(this.#resolved[name], next.#resolved[name])
+        (!isDeepStrictEqual(this.#fileArgs[name], next.#fileArgs[name]) ||
+          !isDeepStrictEqual(this.#cliArgs[name], next.#cliArgs[name])) &&
+        !isDeepStrictEqual(this.#resolved[name], next.#resolved[name])
       ) {
         changed.push(name);
       }

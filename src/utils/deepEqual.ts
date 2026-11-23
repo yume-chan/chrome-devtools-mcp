@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export function deepEqual(a: unknown, b: unknown): boolean {
+export function isDeepStrictEqual(a: unknown, b: unknown): boolean {
   if (a === b) {
     return true;
   }
@@ -17,7 +17,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
         return false;
       }
       for (let i = 0; i < a.length; i++) {
-        if (!deepEqual(a[i], b[i])) {
+        if (!isDeepStrictEqual(a[i], b[i])) {
           return false;
         }
       }
@@ -29,7 +29,12 @@ export function deepEqual(a: unknown, b: unknown): boolean {
       return false;
     }
     for (const key of aKeys) {
-      if (!deepEqual(Reflect.get(a, key), Reflect.get(b, key))) {
+      if (
+        !isDeepStrictEqual(
+          (a as Record<string, unknown>)[key],
+          (b as Record<string, unknown>)[key],
+        )
+      ) {
         return false;
       }
     }

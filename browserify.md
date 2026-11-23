@@ -51,13 +51,15 @@ changed file, not its transitive dependencies.
   constructs an MCP server with a real `ServerConfig` instance and a mock CDP
   transport that logs and answers browser-protocol commands. A List pages
   button invokes `mcpServer.callTool('list_pages')`; the MCP protocol row loads
-  `@modelcontextprotocol/client` from unpkg.org and connects through paired
+  `@modelcontextprotocol/client` from unpkg.com and connects through paired
   in-memory `Transport` objects to list tools and call `list_pages`. The mock
-  reports three sample pages. A local package fallback is used if unpkg.org
+  reports three sample pages. A local package fallback is used if unpkg.com
   cannot be reached.
 - [src/BUILD.gn](./src/BUILD.gn) — Node: N/A (GN). Removed the CLI target and
   excluded daemon, telemetry, heap-snapshot, memory, and screencast sources
-  from the MCP library target. Performance tools are included again.
+  from the MCP library target. Also removed ConfigLocator, ConfigParser,
+  ConfigWatcher, the CLI bundle, and the CLI/Config build targets from
+  browser-facing targets. Performance tools are included again.
 - [scripts/copy-issue-descriptions.ts](./scripts/copy-issue-descriptions.ts)
   — Node: Yes (`node:fs`, `node:path`, `process.argv`; build-time only).
   Copies the descriptions and generates `index.js` with their filenames for
@@ -71,8 +73,9 @@ changed file, not its transitive dependencies.
   `browserUrl`, `wsEndpoint`, or a transport.
 - [src/McpContext.ts](./src/McpContext.ts) — Node: No. Removed filesystem
   roots and host-path validation; added memfs-backed file reads, writes, and
-  temporary outputs; uses the shared deep-equality helper for option checks.
-  Heap-snapshot management and screencast cleanup remain excluded.
+  temporary outputs; uses `isDeepStrictEqual` from the shared deep-equality
+  utility for option checks. Heap-snapshot management and screencast cleanup
+  remain excluded.
 - [src/McpPage.ts](./src/McpPage.ts) — Node: No. Removed screencast recorder
   state, accessors, and disposal handling.
 - [src/McpResponse.ts](./src/McpResponse.ts) — Node: No. Snapshot and
@@ -87,6 +90,8 @@ changed file, not its transitive dependencies.
   validation, local-browser detection, and telemetry logging; replaced
   `node:url`/`node:util` helpers. Browser tool calls retain the original
   timeout-protected lazy connection initialization before running handlers.
+  Replaced the private deep-equality implementation with the shared
+  `isDeepStrictEqual` utility.
 - [src/index.ts](./src/index.ts) — Node: No. Exports the memfs volume and
   filesystem for browser-host seeding and access. Removed CLI setup, config
   watching, filesystem roots, telemetry initialization, and the legacy
@@ -97,7 +102,8 @@ changed file, not its transitive dependencies.
 - [src/config/ServerConfig.ts](./src/config/ServerConfig.ts) — Node: No direct
   built-in imports. Uses option descriptors to resolve defaults and a guarded
   environment-based temp-directory default, so the real class can be loaded
-  and instantiated in the browser.
+  and instantiated in the browser. Uses `isDeepStrictEqual` for non-reloadable
+  and resolved option comparisons.
 - [src/config/ConfigParser.ts](./src/config/ConfigParser.ts) — Node: Yes
   (`node:fs`, `node:path`). CLI config paths are resolved here rather than in
   the shared option definition.
@@ -169,7 +175,9 @@ changed file, not its transitive dependencies.
   Kept error conversion helpers browser-safe; moved the process-level
   unhandled-rejection listener to a Node-only module.
 - [src/utils/deepEqual.ts](./src/utils/deepEqual.ts) — Node: No. Shares deep
-  equality checks between configuration merging and context option changes.
+  equality checks between configuration merging and context/tool option
+  changes. The export is named `isDeepStrictEqual`; McpContext,
+  ServerConfig, and ToolHandler import that shared browser-safe implementation.
 - [src/utils/unhandledRejection.ts](./src/utils/unhandledRejection.ts) —
   Node: Yes (`node:process`). Holds the process-only rejection handler used
   by the Node server and daemon entry points.
@@ -224,7 +232,7 @@ changed file, not its transitive dependencies.
 - The page is still a browser prototype, not a supported browser-hosted MCP
   product. The page constructs a `McpServer`; raw and protocol-level
   `list_pages` calls return its three sample pages. The shared browser could
-  not reach unpkg.org and used the local client package fallback. Other browser
+  not reach unpkg.com and used the local client package fallback. Other browser
   tools and their required CDP behavior still need validation.
 - The Node entry continues to use npm `memfs`. Its Node filesystem and FSA
   adapters transitively load `node:path`, so the browser import map selects a
@@ -253,7 +261,7 @@ changed file, not its transitive dependencies.
   bundles and memfs adapter import mappings. `globalThis.serverConfig` is a
   `ServerConfig` instance. The raw List pages button and MCP client both
   returned three mock pages; the MCP client connected over the in-memory
-  transport pair and listed the available tools. unpkg.org timed out in the
+  transport pair and listed the available tools. unpkg.com timed out in the
   shared browser, so the local package fallback was exercised. Browser-side
   memfs write/read/recursive-remove smoke test passed.
 - `npm run test` — exited successfully, but the script emitted no test results;

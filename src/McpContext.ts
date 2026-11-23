@@ -48,7 +48,7 @@ import {
   readMemoryFile,
   writeMemoryFile,
 } from './utils/memfs.js';
-import {deepEqual} from './utils/deepEqual.js';
+import {isDeepStrictEqual} from './utils/deepEqual.js';
 import {
   fetchWithValidatedRedirects,
   validateUrlNotBlocked,
@@ -88,7 +88,7 @@ function hasOptionChanged(
   nextArgs: ParsedArguments,
 ): boolean {
   return gate.options.some(
-    option => !deepEqual(nextArgs[option], previousArgs[option]),
+    option => !isDeepStrictEqual(nextArgs[option], previousArgs[option]),
   );
 }
 
