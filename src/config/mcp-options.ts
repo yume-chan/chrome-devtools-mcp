@@ -289,10 +289,6 @@ export const mcpOptions: McpOptions = {
 
 export const mcpOptionsForViaCli: McpOptions = {
   ...mcpOptions,
-  headless: {
-    ...mcpOptions.headless,
-    default: true,
-  },
   memoryDebugging: {
     ...mcpOptions.memoryDebugging,
     default: true,
@@ -305,13 +301,6 @@ export const mcpOptionsForViaCli: McpOptions = {
   experimentalStructuredContent: {
     ...mcpOptions.experimentalStructuredContent,
     default: true,
-  },
-  isolated: {
-    ...mcpOptions.isolated,
-    description:
-      'If specified, creates a temporary user-data-dir that is automatically cleaned up after the browser is closed. Defaults to true unless userDataDir is provided.',
-    defaultDescription:
-      'true unless userDataDir, autoConnect, browserUrl or wsEndpoint is set',
   },
 };
 
@@ -398,8 +387,7 @@ export const CLI_EXAMPLES: Array<[string, string]> = [
 ];
 
 export const CONFLICTING_ARGS: Array<Array<keyof McpOptions>> = [
-  ['executablePath', 'browserUrl', 'wsEndpoint'],
-  ['browserUrl', 'wsEndpoint'],
+  ['browserUrl', 'wsEndpoint', 'transport'],
   ['blockedUrlPattern', 'allowedUrlPattern'],
   ['allowUnrestrictedPaths', 'filesystemRoot'],
   ['categoryPwa', 'browserUrl', 'wsEndpoint'],

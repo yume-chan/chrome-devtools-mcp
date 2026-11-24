@@ -48,19 +48,40 @@
 </script>
 <h2>Raw tool call</h2>
 <div>
-  <button id="list-pages" type="button" disabled>List pages</button>
+  <button
+    id="list-pages"
+    type="button"
+    disabled
+    >List pages</button
+  >
 </div>
 <h2>MCP protocol</h2>
 <div>
-  <button id="connect-mcp-client" type="button" disabled>
+  <button
+    id="connect-mcp-client"
+    type="button"
+    disabled
+  >
     Create MCP client and connect
   </button>
-  <button id="list-tools" type="button" disabled>List available tools</button>
-  <button id="call-list-pages" type="button" disabled>
+  <button
+    id="list-tools"
+    type="button"
+    disabled
+    >List available tools</button
+  >
+  <button
+    id="call-list-pages"
+    type="button"
+    disabled
+  >
     Call list_pages via MCP
   </button>
 </div>
-<div id="output" aria-live="polite"></div>
+<div
+  id="output"
+  aria-live="polite"
+></div>
 <script type="module">
   import {BrowserManager} from './out/Default/gen/src/BrowserManager.js';
   import {McpServer} from './out/Default/gen/src/index.js';
@@ -252,7 +273,10 @@
       import('@modelcontextprotocol/client'),
       new Promise((_, reject) => {
         clientLoadTimeout = setTimeout(
-          () => reject(new Error('Timed out loading the MCP client from unpkg.com.')),
+          () =>
+            reject(
+              new Error('Timed out loading the MCP client from unpkg.com.'),
+            ),
           3000,
         );
       }),
@@ -263,9 +287,8 @@
       'MCP client CDN unavailable; using local package',
       error instanceof Error ? error.message : String(error),
     );
-    clientModule = await import(
-      './node_modules/@modelcontextprotocol/client/dist/index.mjs'
-    );
+    clientModule =
+      await import('./node_modules/@modelcontextprotocol/client/dist/index.mjs');
   } finally {
     clearTimeout(clientLoadTimeout);
   }
@@ -308,7 +331,10 @@
 
   listPagesButton.disabled = false;
   connectClientButton.disabled = false;
-  appendOutput('Server ready', 'McpServer constructed with a mock browser transport.');
+  appendOutput(
+    'Server ready',
+    'McpServer constructed with a mock browser transport.',
+  );
 
   listPagesButton.addEventListener('click', async () => {
     listPagesButton.disabled = true;
@@ -335,7 +361,10 @@
       globalThis.mcpClient = mcpClient;
       listToolsButton.disabled = false;
       callListPagesButton.disabled = false;
-      appendOutput('MCP client connected', 'Client connected directly to McpServer.');
+      appendOutput(
+        'MCP client connected',
+        'Client connected directly to McpServer.',
+      );
     } catch (error) {
       connectClientButton.disabled = false;
       appendOutput(
@@ -351,9 +380,7 @@
       const {tools} = await mcpClient.listTools();
       appendOutput(
         `MCP protocol: tools/list (${tools.length} tools)`,
-        tools
-          .map(tool => `${tool.name}: ${tool.description ?? ''}`)
-          .join('\n'),
+        tools.map(tool => `${tool.name}: ${tool.description ?? ''}`).join('\n'),
       );
     } catch (error) {
       appendOutput(

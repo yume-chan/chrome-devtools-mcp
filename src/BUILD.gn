@@ -66,46 +66,18 @@ template("third_party_bundle") {
   }
   _npm_external = [
     "@blackwell-systems/gcf",
-    "@google/genai",
     "@modelcontextprotocol/client",
     "@modelcontextprotocol/core",
     "@modelcontextprotocol/server",
     "@puppeteer/browsers",
-    "@stylistic/eslint-plugin",
     "@toon-format/toon",
-    "@types/node",
-    "@types/semver",
-    "@types/sinon",
-    "@types/yargs",
-    "@typescript-eslint/eslint-plugin",
-    "@typescript-eslint/parser",
     "ajv",
     "core-js",
-    "eslint",
-    "eslint-import-resolver-typescript",
-    "eslint-plugin-eslint-plugin",
-    "eslint-plugin-import",
-    "eslint-plugin-jsdoc",
-    "eslint-plugin-mocha",
-    "eventsource",
-    "eventsource-parser",
-    "globals",
     "jose",
-    "json-schema",
     "lighthouse",
     "memfs",
-    "modern-tar",
     "pkce-challenge",
-    "prettier",
-    "proxy-agent",
-    "puppeteer",
     "puppeteer-core",
-    "semver",
-    "sinon",
-    "typescript",
-    "typescript-eslint",
-    "yargs",
-    "yauzl",
     "zod",
   ]
   if (defined(invoker.external)) {
@@ -137,7 +109,6 @@ third_party_bundle("third_party_index_bundle") {
   entrypoint_name = "index"
   output_file_name = "index.js"
   external = [
-    "../../third_party/devtools-frontend/front_end/core/platform/node/node.js",
     "./lighthouse-devtools-mcp-bundle.js",
   ]
 }

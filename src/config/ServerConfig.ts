@@ -108,7 +108,6 @@ export interface ReadonlyServerConfig {
 export interface ServerConfigInit {
   cliArgs: Partial<ParsedArguments>;
   fileArgs: Partial<ParsedArguments>;
-  configPath?: string;
   env?: Environment;
   resolved: ParsedArguments;
 }
@@ -211,9 +210,6 @@ export class ServerConfig implements ReadonlyServerConfig {
         resolvedArgs.browserUrl ||
         resolvedArgs.wsEndpoint ||
         resolvedArgs.transport;
-      if (explicitArgs.isolated === undefined && !connectsToExistingBrowser) {
-        resolvedArgs.isolated = true;
-      }
       if (
         resolvedArgs.categoryExtensions === undefined &&
         !connectsToExistingBrowser

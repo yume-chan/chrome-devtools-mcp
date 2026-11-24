@@ -3,10 +3,6 @@
   "version": "1.13.0",
   "description": "MCP server for Chrome DevTools",
   "type": "module",
-  "bin": {
-    "chrome-devtools-mcp": "./out/Default/gen/src/bin/chrome-devtools-mcp.js",
-    "chrome-devtools": "./out/Default/gen/src/bin/chrome-devtools.js"
-  },
   "main": "./out/Default/gen/src/index.js",
   "scripts": {
     "cli:generate": "node scripts/generate-cli.ts",
@@ -40,11 +36,13 @@
   },
   "files": [
     "out/Default/gen/src",
+    "src",
+    "!src/bin",
+    "!src/daemon",
+    "!src/telemetry",
     "LICENSE",
     "skills",
     "!**/*.tsbuildinfo",
-    "!**/*.js.map",
-    "!**/*.d.ts",
     "!**/*-tsconfig*.json",
     "!**/*.meta.json",
     "!**/*.stamp",
@@ -62,8 +60,6 @@
     "@blackwell-systems/gcf": "^2.2.2",
     "@google/genai": "^2.0.1",
     "@modelcontextprotocol/client": "2.4.0",
-    "@modelcontextprotocol/core": "2.4.0",
-    "@modelcontextprotocol/server": "2.4.0",
     "@stylistic/eslint-plugin": "^5.4.0",
     "@toon-format/toon": "^4.1.0",
     "@types/node": "^26.0.0",
@@ -72,7 +68,6 @@
     "@types/yargs": "^17.0.33",
     "@typescript-eslint/eslint-plugin": "^8.43.0",
     "@typescript-eslint/parser": "^8.43.0",
-    "core-js": "3.51.0",
     "eslint": "^10.7.0",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-eslint-plugin": "^7.6.2",
@@ -81,18 +76,22 @@
     "eslint-plugin-mocha": "^12.0.2",
     "globals": "^17.0.0",
     "lighthouse": "13.6.0",
-    "memfs": "^4.64.0",
     "prettier": "^3.6.2",
     "puppeteer": "25.17.0",
     "semver": "^7.7.4",
     "sinon": "^22.0.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.43.0",
-    "yargs": "18.2.0",
-    "zod": "^4.4.3"
+    "yargs": "18.2.0"
   },
   "dependencies": {
-    "puppeteer-core": "npm:@yume-chan/puppeteer-core@25.18.1-browser.0"
+    "@modelcontextprotocol/core": "^2.4.0",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "ajv": "^6.15.0",
+    "core-js": "^3.51.0",
+    "memfs": "^4.64.0",
+    "puppeteer-core": "npm:@yume-chan/puppeteer-core@^25.18.1-browser.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@blackwell-systems/gcf": "^2.2.2",
@@ -112,8 +111,7 @@
   "overrides": {
     "eslint-plugin-import": {
       "eslint": "$eslint"
-    },
-    "puppeteer-core": "npm:@yume-chan/puppeteer-core@25.18.1-browser.0"
+    }
   },
   "allowScripts": {
     "core-js": false,

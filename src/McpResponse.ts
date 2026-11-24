@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {WebMCPTool} from 'puppeteer-core';
+import type {WebMCPTool} from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 
 import {UncaughtError} from './collectors/PageCollector.js';
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';
@@ -1497,7 +1497,7 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
         if (paths.length === 0) {
           response.push('No retaining paths found.');
         } else {
-        response.push(
+          response.push(
             HeapSnapshotFormatter.formatRetainingPaths(paths, formatOptions),
           );
         }
@@ -1518,9 +1518,9 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
         if (dominators.length === 0) {
           response.push('No dominators found.');
         } else {
-        response.push(
+          response.push(
             HeapSnapshotFormatter.formatDominators(dominators, formatOptions),
-        );
+          );
         }
         structuredContent.heapSnapshotDominators = dominators;
       }
@@ -1545,9 +1545,9 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
                 })),
               )
             : HeapSnapshotFormatter.formatDiffSummary(
-            paginationData.items,
-            formatOptions,
-          ),
+                paginationData.items,
+                formatOptions,
+              ),
         );
         structuredContent.heapSnapshotClassDiffs = paginationData.items;
       }
@@ -1568,16 +1568,16 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
               })
             : HeapSnapshotFormatter.formatDetailedClassDiffHeader(
                 classDiff,
-            formatOptions,
-          ),
+                formatOptions,
+              ),
         );
         response.push(...paginationData.info);
         response.push(
           compactEncode
             ? compactEncode(paginationData.items)
             : HeapSnapshotFormatter.formatDetailedClassDiffObjects(
-            paginationData.items,
-          ),
+                paginationData.items,
+              ),
         );
         structuredContent.heapSnapshotDetailedClassDiff = {
           classDiff,
@@ -1596,8 +1596,8 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
         response.push(...paginationData.info);
 
         const formatted = HeapSnapshotFormatter.formatDuplicateStrings(
-            paginationData.items,
-            formatOptions,
+          paginationData.items,
+          formatOptions,
         );
         response.push(formatted);
 
@@ -1614,9 +1614,9 @@ Call ${handleDialog(this.#config.resolved).name} to handle it before continuing.
             }),
           );
         } else {
-        response.push(
-          HeapSnapshotFormatter.formatObjectInfo(objectInfo, formatOptions),
-        );
+          response.push(
+            HeapSnapshotFormatter.formatObjectInfo(objectInfo, formatOptions),
+          );
         }
         structuredContent.heapSnapshotObjectDetails = objectInfo;
       }

@@ -1,0 +1,47 @@
+diff --git a/front_end/core/platform/HostRuntime.ts b/front_end/core/platform/HostRuntime.ts
+index 3ab2ead1d19ee0c64890cea1b257d20f38019f11..a55facb6fb72bacf8fb2b0dcd5a0f916adce00b0 100644
+--- a/front_end/core/platform/HostRuntime.ts
++++ b/front_end/core/platform/HostRuntime.ts
+@@ -18,26 +18,10 @@ export type {
+ 
+ // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+ // @ts-ignore 'process' is not available when type-checking against browser types.
+-export const IS_NODE: boolean = typeof (process as unknown) !== 'undefined' && process.versions?.node !== null;
++export const IS_NODE: boolean = false;
+ 
+-export const IS_BROWSER: boolean =
+-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+-    // @ts-ignore 'window' is not available when type-checking against node.js types.
+-    typeof window !== 'undefined' || (typeof self !== 'undefined' && typeof self.postMessage === 'function');
++export const IS_BROWSER: boolean = true
+ 
+ export const HOST_RUNTIME: Api.HostRuntime.HostRuntime = await (async(): Promise<Api.HostRuntime.HostRuntime> => {
+-  // Check IS_BROWSER first: in some embedder environments, both IS_NODE
+-  // and IS_BROWSER can be true because `process` is available in renderer
+-  // contexts. The browser runtime is always correct when browser APIs
+-  // (window/self) are available; the Node.js runtime should only be used in
+-  // pure Node.js environments where those APIs don't exist.
+-  if (IS_BROWSER) {
+-    return (await import('./browser/browser.js')).HostRuntime.HOST_RUNTIME;
+-  }
+-
+-  if (IS_NODE) {
+-    return (await import('./node/node.js')).HostRuntime.HOST_RUNTIME;
+-  }
+-
+-  throw new Error('Unknown runtime!');
++  return (await import('./browser/browser.js')).HostRuntime.HOST_RUNTIME;
+ })();
+diff --git a/front_end/models/issues_manager/MarkdownIssueDescription.ts b/front_end/models/issues_manager/MarkdownIssueDescription.ts
+index 62554cd8ce57f7345d54c7bafd65b34a9bc98b6f..4bf7488d636ca45b7f6ea1b768ef34173376ace1 100644
+--- a/front_end/models/issues_manager/MarkdownIssueDescription.ts
++++ b/front_end/models/issues_manager/MarkdownIssueDescription.ts
+@@ -71,7 +71,7 @@ export async function getFileContent(url: URL): Promise<string> {
+ }
+ 
+ export async function getMarkdownFileContent(filename: string): Promise<string> {
+-  return await getFileContent(new URL(`descriptions/${filename}`, import.meta.url));
++  throw new Error("unsupported")
+ }
+ 
+ export async function createIssueDescriptionFromMarkdown(description: MarkdownIssueDescription):

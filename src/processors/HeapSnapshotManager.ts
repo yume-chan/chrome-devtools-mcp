@@ -6,10 +6,7 @@
 
 import {DevTools} from '../third_party/index.js';
 import {createIdGenerator} from '../utils/id.js';
-import {
-  normalizeMemoryPath,
-  readMemoryFile,
-} from '../utils/memfs.js';
+import {normalizeMemoryPath, readMemoryFile} from '../utils/memfs.js';
 import type {TaskQueue, TaskRunner} from '../utils/TaskRunner.js';
 
 export interface HeapSnapshotAggregate {

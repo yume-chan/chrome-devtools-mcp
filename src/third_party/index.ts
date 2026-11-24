@@ -9,7 +9,7 @@ import 'core-js/modules/es.set.union.v2.js';
 import 'core-js/proposals/iterator-helpers.js';
 
 import type {Flags, OutputMode, Result, RunnerResult} from 'lighthouse';
-import type {Page} from 'puppeteer-core';
+import type {Page} from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 
 // eslint-disable-next-line no-restricted-imports
 import * as DevToolsRoot from '../../third_party/devtools-frontend/front_end/core/root/root.js';
@@ -67,8 +67,8 @@ export {
   WebWorker,
   WebMCP,
   WebMCPTool,
-} from 'puppeteer-core';
-export {default as puppeteer} from 'puppeteer-core';
+} from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
+export {default as puppeteer} from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 export type * from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 export {CdpBrowser} from 'puppeteer-core/internal/cdp/Browser.js';
 export {CdpFrame} from 'puppeteer-core/internal/cdp/Frame.js';

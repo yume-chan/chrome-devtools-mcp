@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {BrowserManager} from './BrowserManager.js';
-import type {ServerConfig} from './config/ServerConfig.js';
+import {BrowserManager} from './BrowserManager.js';
+import {ServerConfig} from './config/ServerConfig.js';
 import {loadIssueDescriptions} from './devtools/issueDescriptions.js';
 import {McpContext} from './McpContext.js';
 import {HeapSnapshotManager} from './processors/HeapSnapshotManager.js';
@@ -26,6 +26,8 @@ import {TaskRunner} from './utils/TaskRunner.js';
 import {VERSION} from './version.js';
 
 export {memoryFileSystem, memoryVolume} from './utils/memfs.js';
+
+export {BrowserManager, ServerConfig};
 
 export interface McpServerOptions {
   browserManager: BrowserManager;

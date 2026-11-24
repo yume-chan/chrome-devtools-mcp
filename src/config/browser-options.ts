@@ -4,19 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {ConnectOptions, ConnectionTransport} from '../third_party';
 import type {McpOptionsFor} from './category-options.js';
-import type {ConnectionTransport} from '../third_party';
 
 export interface BrowserArguments {
   browserUrl?: string;
   wsEndpoint?: string;
   transport?: ConnectionTransport;
-  headless: boolean;
-  executablePath?: string;
-  isolated: boolean;
-  proxyServer?: string;
-  chromeArg?: string[];
-  ignoreDefaultChromeArg?: string[];
+  idGenerator?: ConnectOptions['idGenerator'];
 }
 
 export type BrowserOptions = McpOptionsFor<BrowserArguments>;
@@ -79,37 +74,11 @@ export const browserOptions: BrowserOptions = {
       'Custom transport for connecting to a running Chrome instance.',
     coerce: () => undefined as never,
   },
-  headless: {
-    type: 'boolean',
-    description: 'Whether to run in headless (no UI) mode.',
-    default: false,
-  },
-  executablePath: {
+  idGenerator: {
     type: 'string',
-    description: 'Path to custom Chrome executable.',
-    alias: 'e',
-  },
-  isolated: {
-    type: 'boolean',
     description:
-      'If specified, creates a temporary user-data-dir that is automatically cleaned up after the browser is closed. Defaults to false.',
-    default: false,
-  },
-  proxyServer: {
-    type: 'string',
-    description: `Proxy server configuration for Chrome passed as --proxy-server when launching the browser. See https://www.chromium.org/developers/design-documents/network-settings/ for details.`,
-  },
-  chromeArg: {
-    type: 'array',
-    string: true,
-    describe:
-      'Additional arguments for Chrome. Only applies when Chrome is launched by chrome-devtools-mcp.',
-  },
-  ignoreDefaultChromeArg: {
-    type: 'array',
-    string: true,
-    describe:
-      'Explicitly disable default arguments for Chrome. Only applies when Chrome is launched by chrome-devtools-mcp.',
+      'Custom ID generator for connecting to a running Chrome instance.',
+    coerce: () => undefined as never,
   },
 };
 

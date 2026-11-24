@@ -193,6 +193,7 @@ export class BrowserManager {
       browserUrl: browserURL,
       wsEndpoint,
       transport,
+      idGenerator,
       blockedUrlPattern: blocklist,
       allowedUrlPattern: allowlist,
       categoryExtensions: enableExtensions,
@@ -213,6 +214,9 @@ export class BrowserManager {
       connectOptions.browserURL = browserURL;
     } else if (transport) {
       connectOptions.transport = transport;
+      if (idGenerator) {
+        connectOptions.idGenerator = idGenerator;
+      }
     } else {
       throw new Error(
         'Either browserURL, wsEndpoint or transport must be provided',
