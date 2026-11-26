@@ -1,7 +1,7 @@
 <script type="importmap">
   {
     "imports": {
-      "./out/Default/gen/src/utils/memfs.js": "./out/Default/gen/src/utils/memfs-browser.js",
+      "./out/Default/gen/src/utils/memory-file-system.js": "./out/Default/gen/src/utils/memory-file-system-browser.js",
       "@modelcontextprotocol/server/_shims": "./node_modules/@modelcontextprotocol/server/dist/shimsBrowser.mjs",
       "@modelcontextprotocol/server": "./node_modules/@modelcontextprotocol/server/dist/index.mjs",
       "@modelcontextprotocol/server/": "./node_modules/@modelcontextprotocol/server/dist/",
@@ -84,7 +84,7 @@
 ></div>
 <script type="module">
   import {BrowserManager} from './out/Default/gen/src/BrowserManager.js';
-  import {McpServer} from './out/Default/gen/src/index.js';
+  import {McpServer, memoryEnvironment} from './out/Default/gen/src/index.js';
   import {ServerConfig} from './out/Default/gen/src/config/ServerConfig.js';
 
   const mockPages = [
@@ -246,7 +246,10 @@
   const browserManager = new BrowserManager(config);
   globalThis.ServerConfig = ServerConfig;
   globalThis.serverConfig = config;
-  const mcpServer = await McpServer.from(config, {browserManager});
+  const mcpServer = await McpServer.from(config, {
+    browserManager,
+    environment: memoryEnvironment,
+  });
   globalThis.mcpServer = mcpServer;
   const outputElement = document.querySelector('#output');
   const listPagesButton = document.querySelector('#list-pages');

@@ -5,46 +5,40 @@
  */
 
 import {
+  type Environment,
   getMemoryTempFilePath,
+  type MemoryFileSystem,
   normalizeMemoryFileUrl,
   normalizeMemoryPath,
-} from './memfs-common.js';
+} from './memory-file-system-common.js';
 
 const files = new Map<string, Uint8Array>();
 const directories = new Set(['/']);
 
 export const memoryVolume: Map<string, Uint8Array> = files;
 
-export interface BrowserMemoryFileSystem {
-  promises: {
-    readFile(filePath: string): Promise<Uint8Array>;
-    mkdir(
-      directoryPath: string,
-      options?: {recursive?: boolean},
-    ): Promise<void>;
-    writeFile(filePath: string, data: string | Uint8Array): Promise<void>;
-    rm(
-      filePath: string,
-      options?: {force?: boolean; recursive?: boolean},
-    ): Promise<void>;
-  };
-}
+export type {Environment, MemoryFileSystem};
 
-export const memoryFileSystem: BrowserMemoryFileSystem = {
-  promises: {
-    readFile: readMemoryFileSystem,
-    mkdir: makeMemoryDirectory,
-    writeFile: writeMemoryFileSystem,
-    rm: removeMemoryEntry,
-  },
+export const memoryFileSystem: MemoryFileSystem = {
+  readFile: readMemoryFileSystem,
+  mkdir: makeMemoryDirectory,
+  writeFile: writeMemoryFileSystem,
+  rm: removeMemoryEntry,
+};
+
+export const memoryEnvironment: Environment = {
+  fileSystem: memoryFileSystem,
+  volume: memoryVolume,
+  normalizePath: normalizeMemoryPath,
+  normalizeFileUrl: normalizeMemoryFileUrl,
+  getTempFilePath: getMemoryTempFilePath,
 };
 
 export {getMemoryTempFilePath, normalizeMemoryFileUrl, normalizeMemoryPath};
 
 export async function readMemoryFile(filePath: string): Promise<Uint8Array> {
-  const contents = await memoryFileSystem.promises.readFile(
-    normalizeMemoryPath(filePath),
-  );
+  const normalizedPath = normalizeMemoryPath(filePath);
+  const contents = await memoryFileSystem.readFile(normalizedPath);
   return new Uint8Array(contents);
 }
 
@@ -55,8 +49,8 @@ export async function writeMemoryFile(
   const normalizedPath = normalizeMemoryPath(filePath);
   const separator = normalizedPath.lastIndexOf('/');
   const parentPath = separator === 0 ? '/' : normalizedPath.slice(0, separator);
-  await memoryFileSystem.promises.mkdir(parentPath, {recursive: true});
-  await memoryFileSystem.promises.writeFile(normalizedPath, data);
+  await memoryFileSystem.mkdir(parentPath, {recursive: true});
+  await memoryFileSystem.writeFile(normalizedPath, data);
   return normalizedPath;
 }
 
@@ -91,12 +85,6 @@ async function makeMemoryDirectory(
       );
     }
     if (directories.has(currentPath)) {
-      if (index === segments.length - 1 && !options?.recursive) {
-        throw memoryFileSystemError(
-          'InvalidModificationError',
-          `A directory already exists at ${currentPath}.`,
-        );
-      }
       continue;
     }
     if (index !== segments.length - 1 && !options?.recursive) {
@@ -141,17 +129,6 @@ async function removeMemoryEntry(
   options?: {force?: boolean; recursive?: boolean},
 ): Promise<void> {
   const normalizedPath = normalizeMemoryPath(filePath);
-  const separator = normalizedPath.lastIndexOf('/');
-  const parentPath = separator === 0 ? '/' : normalizedPath.slice(0, separator);
-  if (!directories.has(parentPath)) {
-    if (options?.force) {
-      return;
-    }
-    throw memoryFileSystemError(
-      'NotFoundError',
-      `Parent directory does not exist for ${normalizedPath}.`,
-    );
-  }
   if (files.delete(normalizedPath)) {
     return;
   }

@@ -6,10 +6,6 @@ import("//third_party/devtools-frontend/scripts/build/ninja/copy.gni")
 import(
     "//third_party/devtools-frontend/scripts/build/typescript/typescript.gni")
 
-copy_to_gen("lighthouse_bundle") {
-  sources = [ "third_party/lighthouse-devtools-mcp-bundle.js" ]
-}
-
 action("issue_descriptions") {
   script = "//third_party/node/node.py"
   _script = "//scripts/copy-issue-descriptions.ts"
@@ -40,7 +36,6 @@ ts_library("third_party") {
     "third_party/devtools-formatter-worker.ts",
     "third_party/devtools-heap-snapshot-worker.ts",
     "third_party/index.ts",
-    "third_party/lighthouse-devtools-mcp-bundle.d.ts",
     "third_party/urlpattern.ts",
     "third_party/zod.ts",
   ]
@@ -54,7 +49,6 @@ ts_library("third_party") {
 
   deps = [
     ":issue_descriptions",
-    ":lighthouse_bundle",
   ]
 }
 
@@ -72,10 +66,7 @@ template("third_party_bundle") {
     "@puppeteer/browsers",
     "@toon-format/toon",
     "ajv",
-    "core-js",
     "jose",
-    "lighthouse",
-    "memfs",
     "pkce-challenge",
     "puppeteer-core",
     "zod",
@@ -108,9 +99,6 @@ template("third_party_bundle") {
 third_party_bundle("third_party_index_bundle") {
   entrypoint_name = "index"
   output_file_name = "index.js"
-  external = [
-    "./lighthouse-devtools-mcp-bundle.js",
-  ]
 }
 
 third_party_bundle("third_party_formatter_worker_bundle") {
@@ -138,7 +126,6 @@ action("third_party_notices") {
     _script,
     "//package-lock.json",
     "//package.json",
-    "third_party/LIGHTHOUSE_MCP_BUNDLE_THIRD_PARTY_NOTICES",
   ]
   deps = []
   outputs = [
@@ -217,7 +204,6 @@ ts_library("mcp_lib") {
     "tools/emulation.ts",
     "tools/extensions.ts",
     "tools/input.ts",
-    "tools/lighthouse.ts",
     "tools/logpoints.ts",
     "tools/memory.ts",
     "tools/network.ts",
@@ -245,9 +231,9 @@ ts_library("mcp_lib") {
     "utils/id.ts",
     "utils/keyboard.ts",
     "utils/logger.ts",
-    "utils/memfs-browser.ts",
-    "utils/memfs-common.ts",
-    "utils/memfs.ts",
+    "utils/memory-file-system-browser.ts",
+    "utils/memory-file-system-common.ts",
+    "utils/memory-file-system.ts",
     "utils/network.ts",
     "utils/pagination.ts",
     "utils/polyfill.ts",
@@ -266,7 +252,6 @@ ts_library("mcp_lib") {
 group("all") {
   public_deps = [
     ":issue_descriptions",
-    ":lighthouse_bundle",
     ":mcp_lib",
     ":third_party",
     ":third_party_index_bundle",

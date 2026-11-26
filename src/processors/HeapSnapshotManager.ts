@@ -6,7 +6,8 @@
 
 import {DevTools} from '../third_party/index.js';
 import {createIdGenerator} from '../utils/id.js';
-import {normalizeMemoryPath, readMemoryFile} from '../utils/memfs.js';
+import {memoryEnvironment} from '../utils/memory-file-system.js';
+import type {Environment} from '../utils/memory-file-system-common.js';
 import type {TaskQueue, TaskRunner} from '../utils/TaskRunner.js';
 
 export interface HeapSnapshotAggregate {
@@ -126,6 +127,7 @@ function hasValidHeapSnapshotExtension(filePath: string): boolean {
 }
 
 export class HeapSnapshotManager {
+  #environment: Environment;
   #snapshotIdGenerator = createIdGenerator();
   #snapshots = new Map<string, Promise<HeapSnapshot>>();
   /**
@@ -139,9 +141,13 @@ export class HeapSnapshotManager {
   #taskRunner: TaskRunner;
   #fileTaskQueues = new Map<string, TaskQueue>();
 
-  constructor(taskRunner: TaskRunner) {
+  constructor(
+    taskRunner: TaskRunner,
+    environment: Environment = memoryEnvironment,
+  ) {
     this.#taskRunner = taskRunner;
     this.#taskQueue = taskRunner.createQueue();
+    this.#environment = environment;
   }
 
   /**
@@ -152,7 +158,7 @@ export class HeapSnapshotManager {
     if (filePath === undefined) {
       return await this.#taskQueue.scheduleTask();
     }
-    const absolutePath = normalizeMemoryPath(filePath);
+    const absolutePath = this.#environment.normalizePath(filePath);
     let queue = this.#fileTaskQueues.get(absolutePath);
     if (!queue) {
       queue = this.#taskRunner.createQueue(this.#taskQueue);
@@ -167,7 +173,7 @@ export class HeapSnapshotManager {
         `File ${filePath} must have a .heapsnapshot or .heaptimeline extension.`,
       );
     }
-    const absolutePath = normalizeMemoryPath(filePath);
+    const absolutePath = this.#environment.normalizePath(filePath);
     let cached = this.#snapshots.get(absolutePath);
     if (!cached) {
       const uid = this.#snapshotIdGenerator();
@@ -494,7 +500,8 @@ export class HeapSnapshotManager {
         resolveSnapshot(snapshotProxy);
       });
 
-      const fileContents = await readMemoryFile(absolutePath);
+      const fileContents =
+        await this.#environment.fileSystem.readFile(absolutePath);
       const text = new TextDecoder().decode(fileContents);
       for (let offset = 0; offset < text.length; offset += 1024 * 1024) {
         const chunk = text.slice(offset, offset + 1024 * 1024);
@@ -543,7 +550,7 @@ export class HeapSnapshotManager {
 
   async disposeSnapshot(filePath: string): Promise<boolean> {
     using guard = await this.#scheduleTask(filePath);
-    const absolutePath = normalizeMemoryPath(filePath);
+    const absolutePath = this.#environment.normalizePath(filePath);
     const cached = this.#snapshots.get(absolutePath);
     if (cached) {
       this.#snapshots.delete(absolutePath);

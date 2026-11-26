@@ -5,6 +5,7 @@
  */
 
 import {BrowserManager} from './BrowserManager.js';
+import type {BrowserManagerLike} from './BrowserManager.js';
 import {ServerConfig} from './config/ServerConfig.js';
 import {loadIssueDescriptions} from './devtools/issueDescriptions.js';
 import {McpContext} from './McpContext.js';
@@ -24,13 +25,27 @@ import {logCruxDisclaimer} from './utils/disclaimers.js';
 import {logger} from './utils/logger.js';
 import {TaskRunner} from './utils/TaskRunner.js';
 import {VERSION} from './version.js';
+import type {Environment} from './utils/memory-file-system-common.js';
+import {memoryEnvironment} from './utils/memory-file-system.js';
 
-export {memoryFileSystem, memoryVolume} from './utils/memfs.js';
+export {memoryFileSystem, memoryVolume} from './utils/memory-file-system.js';
+export {memoryEnvironment} from './utils/memory-file-system.js';
+export {
+  opfsEnvironment,
+  opfsFileSystem,
+  opfsVolume,
+} from './utils/memory-file-system-browser.js';
+export type {
+  Environment,
+  MemoryFileSystem,
+} from './utils/memory-file-system-common.js';
 
 export {BrowserManager, ServerConfig};
+export type {BrowserManagerLike};
 
 export interface McpServerOptions {
-  browserManager: BrowserManager;
+  browserManager: BrowserManagerLike;
+  environment?: Environment;
 }
 
 interface ToolEntry {
@@ -41,17 +56,22 @@ interface ToolEntry {
 export class McpServer {
   readonly server: SdkMcpServer;
   #config: ServerConfig;
-  #browserManager: BrowserManager;
+  #browserManager: BrowserManagerLike;
   #context: McpContext;
   /** Runs every tool call and config reload. */
   #taskRunner = new TaskRunner();
-  #heapSnapshotManager = new HeapSnapshotManager(this.#taskRunner);
+  #heapSnapshotManager: HeapSnapshotManager;
 
   #tools = new Map<string, ToolEntry>();
 
   private constructor(config: ServerConfig, options: McpServerOptions) {
     this.#config = config;
     this.#browserManager = options.browserManager;
+    const environment = options.environment ?? memoryEnvironment;
+    this.#heapSnapshotManager = new HeapSnapshotManager(
+      this.#taskRunner,
+      environment,
+    );
 
     this.server = new SdkMcpServer(
       {
@@ -70,6 +90,7 @@ export class McpServer {
       config: this.#config,
       heapSnapshotManager: this.#heapSnapshotManager,
       taskRunner: this.#taskRunner,
+      environment,
       getBrowser: () => this.#browserManager.ensureBrowser(),
     });
 

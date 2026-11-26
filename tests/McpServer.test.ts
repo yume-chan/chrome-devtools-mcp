@@ -116,6 +116,22 @@ describe('McpServer', () => {
     await server.close();
   });
 
+  it('accepts a custom browser manager implementation', async () => {
+    const context = createMockMcpContext();
+    sinon.stub(McpContext, 'create').returns(context);
+    const close = sinon.spy(async () => {});
+    const browserManager = {
+      ensureBrowser: async () => createMockPuppeteerBrowser(),
+      abandonPendingAttempt() {},
+      close,
+    };
+
+    const server = await McpServer.from(parseConfig(), {browserManager});
+
+    await server.close();
+    sinon.assert.calledOnceWithExactly(close);
+  });
+
   describe('callTool', () => {
     it('forwards the MCP request signal through the dispatcher', async () => {
       const started = Promise.withResolvers<AbortSignal>();

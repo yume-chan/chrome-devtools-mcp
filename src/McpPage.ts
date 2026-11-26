@@ -39,10 +39,7 @@ import {
   type ConsoleMessage,
   type HTTPRequest,
   DevTools,
-  type Flags,
   type JSONSchema7Definition,
-  lighthouseNavigation,
-  lighthouseSnapshot,
   type RunnerResult,
 } from './third_party/index.js';
 import type {ToolGroups} from './tools/thirdPartyDeveloper.js';
@@ -1363,10 +1360,8 @@ export class McpPage implements ContextPage {
       }
       const {cdpRequestId, cdpBackendNodeId} = await devtoolsPage.evaluate(
         async () => {
-          // @ts-expect-error no types
-          const UI = await import('/bundled/ui/legacy/legacy.js');
-          // @ts-expect-error no types
-          const SDK = await import('/bundled/core/sdk/sdk.js');
+          const UI = await eval("import('/bundled/ui/legacy/legacy.js')");
+          const SDK = await eval("import('/bundled/core/sdk/sdk.js')");
           const request = UI.Context.Context.instance().flavor(
             SDK.NetworkRequest.NetworkRequest,
           );
@@ -1670,16 +1665,12 @@ export class McpPage implements ContextPage {
     });
   }
 
-  lighthouseNavigation(flags?: Flags): Promise<RunnerResult | undefined> {
-    return lighthouseNavigation(this.pptrPage, this.pptrPage.url(), {
-      flags,
-    });
+  lighthouseNavigation(): Promise<RunnerResult | undefined> {
+    throw new Error('lighthouseNavigation is not implemented');
   }
 
-  lighthouseSnapshot(flags?: Flags): Promise<RunnerResult | undefined> {
-    return lighthouseSnapshot(this.pptrPage, {
-      flags,
-    });
+  lighthouseSnapshot(): Promise<RunnerResult | undefined> {
+    throw new Error('lighthouseSnapshot is not implemented');
   }
 
   /**

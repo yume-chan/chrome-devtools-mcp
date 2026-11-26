@@ -11,7 +11,11 @@ import {execFileSync} from 'node:child_process';
 
 const projectRoot = process.cwd();
 const devtoolsDir = resolve(projectRoot, 'third_party', 'devtools-frontend');
-const patchFile = resolve(projectRoot, 'third_party', 'devtools-frontend.patch');
+const patchFile = resolve(
+  projectRoot,
+  'third_party',
+  'devtools-frontend.patch',
+);
 
 function runGit(args: string[], cwd = devtoolsDir): string {
   try {

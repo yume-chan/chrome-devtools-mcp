@@ -4,7 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-let nextTemporaryDirectoryId = 0;
+export interface MemoryFileSystem {
+  readFile(filePath: string): Promise<Uint8Array>;
+  mkdir(directoryPath: string, options?: {recursive?: boolean}): Promise<void>;
+  writeFile(filePath: string, data: string | Uint8Array): Promise<void>;
+  rm(
+    filePath: string,
+    options?: {force?: boolean; recursive?: boolean},
+  ): Promise<void>;
+}
+
+export interface Environment {
+  readonly fileSystem: MemoryFileSystem;
+  readonly volume: Map<string, Uint8Array>;
+  normalizePath(filePath: string): string;
+  normalizeFileUrl(fileUrl: string): string;
+  getTempFilePath(filename: string): string;
+}
 
 export function normalizeMemoryPath(filePath: string): string {
   if (filePath.trim() === '') {
@@ -18,9 +34,7 @@ export function normalizeMemoryPath(filePath: string): string {
     }
     if (segment === '..') {
       if (segments.length === 0) {
-        throw new Error(
-          `File path escapes the in-memory filesystem: ${filePath}`,
-        );
+        throw new Error(`File path escapes the memory filesystem: ${filePath}`);
       }
       segments.pop();
       continue;
@@ -51,6 +65,6 @@ export function getMemoryTempFilePath(filename: string): string {
       `Invalid temp file name "${filename}": it must not contain a directory.`,
     );
   }
-  const directory = `/tmp/chrome-devtools-mcp-${nextTemporaryDirectoryId++}`;
+  const directory = `/tmp/chrome-devtools-mcp-${globalThis.crypto.randomUUID()}`;
   return `${directory}/${normalizedFilename}`;
 }

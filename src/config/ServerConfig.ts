@@ -207,9 +207,7 @@ export class ServerConfig implements ReadonlyServerConfig {
         resolvedArgs.filesystemRoot = undefined;
       }
       const connectsToExistingBrowser =
-        resolvedArgs.browserUrl ||
-        resolvedArgs.wsEndpoint ||
-        resolvedArgs.transport;
+        resolvedArgs.browserUrl || resolvedArgs.wsEndpoint;
       if (
         resolvedArgs.categoryExtensions === undefined &&
         !connectsToExistingBrowser

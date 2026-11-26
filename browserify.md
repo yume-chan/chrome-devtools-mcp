@@ -3,7 +3,7 @@
 # Goals
 
 1. Remove usages of Node.js built-in modules from the browser runtime graph.
-2. Keep filesystem-dependent features by using memfs for runtime-created files.
+2. Keep filesystem-dependent features by using a virtual filesystem for runtime-created files.
 3. Access build-folder assets through asynchronous imports or `fetch`.
 4. Replace supported Node.js APIs with Web APIs.
 
@@ -14,8 +14,8 @@
    1. Check if it uses Node.js built-in modules.
    2. If the whole file is for Node.js only, remove it from BUILD.gn and remove
       browser-runtime references to it.
-   3. If it does, determine if it can be replaced with a Web API or memfs.
-   4. Do not remove a feature only because it uses filesystem APIs; use memfs
+   3. If it does, determine if it can be replaced with a Web API or virtual storage.
+   4. Do not remove a feature only because it uses filesystem APIs; use OPFS
       for runtime-created files. Keep features that require other unavailable
       Node.js capabilities out of the browser build.
 
@@ -25,7 +25,7 @@
   imports from type-only imports and build/test-only dependencies.
 - Prefer standard Web APIs over Node.js globals and shims. Do not add a global
   `Buffer`, `process`, or Node.js module polyfill to make a browser build pass.
-- Read immutable build assets with generated imports or `fetch`; use memfs only
+- Read immutable build assets with generated imports or `fetch`; use OPFS only
   for runtime-created files and document paths as virtual filesystem paths.
 - Keep Node-only setup and packaging scripts outside the browser runtime graph.
 - Verify the generated entrypoint and transitive bundle in a real browser;
@@ -47,7 +47,7 @@ changed file, not its transitive dependencies.
 - [index.html](./index.html) — Node: No. Added a prototype page that imports
   the generated MCP server module, maps the third-party barrel to the
   browser-specific bundle, maps the MCP SDK shim to its browser
-  implementation, routes the Node memfs module to the browser adapter, and
+  implementation, routes the Node memory filesystem module to the browser adapter, and
   constructs an MCP server with a real `ServerConfig` instance and a mock CDP
   transport that logs and answers browser-protocol commands. A List pages
   button invokes `mcpServer.callTool('list_pages')`; the MCP protocol row loads
@@ -75,14 +75,14 @@ changed file, not its transitive dependencies.
   launching, profile/file handling, and OS detection; connection now requires
   `browserUrl`, `wsEndpoint`, or a transport.
 - [src/McpContext.ts](./src/McpContext.ts) — Node: No. Removed filesystem
-  roots and host-path validation; added memfs-backed file reads, writes, and
+  roots and host-path validation; added memory-file-system-backed file reads, writes, and
   temporary outputs; uses `isDeepStrictEqual` from the shared deep-equality
   utility for option checks. Restored heap-snapshot manager integration and
   all heap tool context methods. Screencast cleanup remains excluded.
 - [src/McpPage.ts](./src/McpPage.ts) — Node: No. Removed screencast recorder
   state, accessors, and disposal handling.
 - [src/McpResponse.ts](./src/McpResponse.ts) — Node: No. Snapshot and
-  network-body outputs can be written through memfs-backed context callbacks.
+  network-body outputs can be written through memory-file-system-backed context callbacks.
   Restored heap-snapshot response state, structured fields, formatting, and
   pagination.
 - [src/LogpointManager.ts](./src/LogpointManager.ts) — Node: No. Replaced
@@ -99,9 +99,9 @@ changed file, not its transitive dependencies.
 - [src/processors/HeapSnapshotManager.ts](./src/processors/HeapSnapshotManager.ts)
   — Node: No built-in imports remain. Restored the original snapshot loading,
   caching, filtering, diffing, and disposal logic with normalized virtual
-  paths and memfs reads. Heap snapshot worker chunks are decoded into strings
+  paths and memory-file-system reads. Heap snapshot worker chunks are decoded into strings
   for the existing loader proxy.
-- [src/index.ts](./src/index.ts) — Node: No. Exports the memfs volume and
+- [src/index.ts](./src/index.ts) — Node: No. Exports the memory volume and
   filesystem for browser-host seeding and access. Removed CLI setup, config
   watching, filesystem roots, telemetry initialization, and the legacy
   `createMcpServer` helper; the server now receives its browser manager.
@@ -131,8 +131,7 @@ changed file, not its transitive dependencies.
   built-in use. Switched Puppeteer exports to its browser entry point, removed
   unused CLI, browser-installation, and screen-recorder runtime exports, and
   re-exports the shared URLPattern polyfill and Acorn parser without importing
-  the Node CLI bundle. It does not import memfs's FSA adapter because that
-  dependency also reaches `node:path`.
+  the Node CLI bundle. It does not import a memfs FSA adapter.
 - [src/third_party/cli.ts](./src/third_party/cli.ts) — Node: No direct
   built-in imports. Still exports CLI-only yargs and PipeTransport APIs;
   URLPattern now comes from its shared module instead of being coupled to
@@ -147,7 +146,7 @@ changed file, not its transitive dependencies.
 
 - [src/formatters/NetworkFormatter.ts](./src/formatters/NetworkFormatter.ts)
   — Node: No. Replaced `Buffer` decoding with `TextDecoder` and added a
-  callback for writing request/response bodies to memfs.
+  callback for writing request/response bodies to memory storage.
 - [src/formatters/WebAuthnFormatter.ts](./src/formatters/WebAuthnFormatter.ts)
   — Node: No. Replaced `Buffer` base64url conversion with Web API
   `atob`/`btoa` conversion in the shared byte utilities.
@@ -157,28 +156,28 @@ changed file, not its transitive dependencies.
 - [src/tools/input.ts](./src/tools/input.ts) — Node: No. Added specific
   `ElementHandle` element types for select-option property access.
 - [src/tools/lighthouse.ts](./src/tools/lighthouse.ts) — Node: No. Replaced
-  `node:path` and host filesystem report writes with memfs-backed report
+  `node:path` and host filesystem report writes with memory-backed report
   output.
 - [src/tools/memory.ts](./src/tools/memory.ts) — Node: No. Restored the original
   heap snapshot and analysis tool definitions. Heap capture now listens for
   `HeapProfiler.addHeapSnapshotChunk` events over the page CDP session and
-  writes the resulting chunks to memfs instead of passing a host `path`.
+  writes the resulting chunks to memory storage instead of passing a host `path`.
 - [src/tools/tools.ts](./src/tools/tools.ts) — Node: No. Restored memory tool
   registration in the shared tool factory.
 - [src/tools/network.ts](./src/tools/network.ts) — Node: No. Replaced
-  host-file mock response reads with memfs reads; upstream mocks remain.
+  host-file mock response reads with memory-file-system reads; upstream mocks remain.
 - [src/tools/performance.ts](./src/tools/performance.ts) — Node: No. Replaced
-  `node:zlib` with `CompressionStream` and raw-trace file output with memfs.
+  `node:zlib` with `CompressionStream` and raw-trace memory-file-system output.
 - [src/tools/screenshot.ts](./src/tools/screenshot.ts) — Node: No. Replaced
   the `Buffer` global with Web API base64 encoding and writes file/temporary
-  outputs to memfs.
+  outputs to memory storage.
 - [src/tools/script.ts](./src/tools/script.ts) — Node: No. Replaced
-  `node:url` and host-file access with URL/Web API and memfs handling for
+  `node:url` and host-file access with URL/Web API and memory-file-system handling for
   `sourcePath` and result output.
 - [src/tools/slim/tools.ts](./src/tools/slim/tools.ts) — Node: No. Restored
-  the slim-mode screenshot tool with memfs-backed file and temporary output.
+  the slim-mode screenshot tool with memory-file-system-backed file and temporary output.
 - [src/tools/snapshot.ts](./src/tools/snapshot.ts) — Node: No. Restored the
-  snapshot `filePath` output through memfs.
+  snapshot `filePath` output through memory storage.
 - [src/tools/tools.ts](./src/tools/tools.ts) — Node: No. Removed memory and
   screencast tools from tool registration.
 - [src/types.ts](./src/types.ts) — Node: No. Made snapshot `loaderId`
@@ -210,15 +209,15 @@ changed file, not its transitive dependencies.
   now imports URLPattern from the shared browser-safe third-party entrypoint.
 - [src/utils/bytes.ts](./src/utils/bytes.ts) — Node: No. Added Web API
   base64 encoding for screenshots and base64url conversion for WebAuthn IDs.
-- [src/utils/memfs.ts](./src/utils/memfs.ts) — Node: No direct built-in use.
-  Uses the npm `memfs` Volume API for Node, with shared virtual-path, file URL,
-  and temporary-path helpers.
-- [src/utils/memfs-browser.ts](./src/utils/memfs-browser.ts) — Node: No.
-  Provides the filesystem operations needed by the browser runtime using
-  in-memory Maps; it avoids memfs's transitive `node:path` dependency.
-- [src/utils/memfs-common.ts](./src/utils/memfs-common.ts) — Node: No.
-  Shares virtual-path normalization, file URL conversion, and unique temporary
-  path generation between the Node and browser filesystem adapters.
+- [src/utils/memory-file-system.ts](./src/utils/memory-file-system.ts) — Node: No
+  direct built-in use. Provides shared virtual paths and an in-memory Map-backed
+  filesystem for Node runtime-created files.
+- [src/utils/memory-file-system-browser.ts](./src/utils/memory-file-system-browser.ts)
+  — Node: No. Uses the Origin Private File System for browser runtime-created
+  files, with a Map fallback when OPFS is unavailable.
+- [src/utils/memory-file-system-common.ts](./src/utils/memory-file-system-common.ts)
+  — Node: No. Shares virtual-path normalization, file URL conversion, and unique
+  temporary path generation between the Node and browser filesystem adapters.
 - [src/bin/chrome-devtools-mcp-main.ts](./src/bin/chrome-devtools-mcp-main.ts)
   — Node: Yes (`node:process`; Node entry point). Imports the rejection
   handler from its Node-only module.
@@ -226,10 +225,10 @@ changed file, not its transitive dependencies.
   `node:net`, `node:os`, `node:path`, `node:process`; Node-only daemon).
   Imports the separated rejection handler.
 - [package.json](./package.json) and [package-lock.json](./package-lock.json)
-  — Added memfs as a development dependency.
+  — Removed memfs and its transitive dependencies.
 - [tests/utils/bytes.test.ts](./tests/utils/bytes.test.ts) and
   [tests/utils/files.test.ts](./tests/utils/files.test.ts) — Added focused
-  tests for Web API base64 encoding and memfs path/read/write behavior.
+  tests for Web API base64 encoding and memory path/read/write behavior.
 - [tests/utils/errorHandling.test.ts](./tests/utils/errorHandling.test.ts),
   [tests/config/ServerConfig.test.ts](./tests/config/ServerConfig.test.ts),
   and [tests/cli.test.ts](./tests/cli.test.ts) — Updated imports for the
@@ -251,10 +250,9 @@ changed file, not its transitive dependencies.
   `list_pages` calls return its three sample pages. The shared browser could
   not reach unpkg.com and used the local client package fallback. Other browser
   tools and their required CDP behavior still need validation.
-- The Node entry continues to use npm `memfs`. Its Node filesystem and FSA
-  adapters transitively load `node:path`, so the browser import map selects a
-  small browser-safe Map-backed adapter instead; no Node.js module polyfill
-  was added.
+- The browser entry uses the OPFS-backed adapter. The browser import map
+  selects that adapter instead of the Node Map-backed implementation; no
+  Node.js module polyfill was added.
 - The mock CDP transport provides discovery and attachment events for three
   sample pages, target info, browser version, and the observed selected-page
   setup commands. Unsupported commands return an explicit protocol error;
@@ -282,12 +280,12 @@ changed file, not its transitive dependencies.
   `node_modules` inputs: the browser bundle kept 512 DevTools submodule inputs
   bundled.
 - Browser — reloaded the generated `src/index.js` graph with the browser
-  bundles and memfs adapter import mappings. `globalThis.serverConfig` is a
+  bundles and memory-file-system adapter import mappings. `globalThis.serverConfig` is a
   `ServerConfig` instance. The raw List pages button and MCP client both
   returned three mock pages; the MCP client connected over the in-memory
   transport pair and listed the available tools. unpkg.com timed out in the
   shared browser, so the local package fallback was exercised. Browser-side
-  memfs write/read/recursive-remove smoke test passed.
+  memory-file-system write/read/recursive-remove smoke test passed.
 - `npm run test` — exited successfully, but the script emitted no test results;
   treat it as a build check rather than evidence that the unit tests ran.
 - `npm run test tests/utils/files.test.ts` — could not run because

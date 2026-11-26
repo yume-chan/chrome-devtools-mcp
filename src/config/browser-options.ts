@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {ConnectOptions, ConnectionTransport} from '../third_party';
-import type {McpOptionsFor} from './category-options.js';
+import type { McpOptionsFor } from './category-options.js';
 
 export interface BrowserArguments {
   browserUrl?: string;
   wsEndpoint?: string;
-  transport?: ConnectionTransport;
-  idGenerator?: ConnectOptions['idGenerator'];
 }
 
 export type BrowserOptions = McpOptionsFor<BrowserArguments>;
@@ -67,18 +64,6 @@ export const browserOptions: BrowserOptions = {
         throw new Error(`Provided wsEndpoint ${url} is not valid URL.`);
       }
     },
-  },
-  transport: {
-    type: 'string',
-    description:
-      'Custom transport for connecting to a running Chrome instance.',
-    coerce: () => undefined as never,
-  },
-  idGenerator: {
-    type: 'string',
-    description:
-      'Custom ID generator for connecting to a running Chrome instance.',
-    coerce: () => undefined as never,
   },
 };
 

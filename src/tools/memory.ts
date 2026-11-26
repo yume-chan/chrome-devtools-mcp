@@ -7,7 +7,6 @@
 import {MAX_NAME_LENGTH} from '../formatters/HeapSnapshotFormatter.js';
 import {zod} from '../third_party/index.js';
 import {byteSizeRangeSchema} from '../utils/bytes.js';
-import {writeMemoryFile} from '../utils/memfs.js';
 
 import {ToolCategory} from './categories.js';
 import {
@@ -91,9 +90,10 @@ export const takeHeapSnapshot: PageToolFactory = definePageTool(() => ({
     } finally {
       session.off('HeapProfiler.addHeapSnapshotChunk', onChunk);
     }
-    await writeMemoryFile(
-      snapshotPath,
+    await context.saveFile(
       new TextEncoder().encode(chunks.join('')),
+      snapshotPath,
+      '.heapsnapshot',
     );
 
     response.appendResponseLine(`Heap snapshot saved to ${snapshotPath}`);

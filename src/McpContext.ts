@@ -53,12 +53,9 @@ import type {Logger} from './types.js';
 import {isDeepStrictEqual} from './utils/deepEqual.js';
 import {redactUrlForLogging} from './utils/logger.js';
 import {
-  getMemoryTempFilePath,
-  normalizeMemoryFileUrl,
-  normalizeMemoryPath,
-  readMemoryFile,
-  writeMemoryFile,
-} from './utils/memfs.js';
+  type Environment,
+  memoryEnvironment,
+} from './utils/memory-file-system.js';
 import {
   fetchWithValidatedRedirects,
   validateUrlNotBlocked,
@@ -68,6 +65,7 @@ import {isAllowedUrl} from './utils/url.js';
 
 export interface McpContextOptions {
   config: ReadonlyServerConfig;
+  environment?: Environment;
   // Custom navigation timeout in milliseconds to override default.
   navigationTimeout?: number;
   // Shared heap snapshot manager to preserve loaded snapshots across browser reconnects.
@@ -184,6 +182,7 @@ export class McpContext implements Context, BrowserlessContext {
   #config: ReadonlyServerConfig;
   #options: McpContextOptions;
   #heapSnapshotManager: HeapSnapshotManager;
+  #environment: Environment;
   private constructor(
     logger: Logger,
     options: McpContextOptions,
@@ -202,6 +201,7 @@ export class McpContext implements Context, BrowserlessContext {
     this.#config = options.config;
     this.#options = options;
     this.#heapSnapshotManager = options.heapSnapshotManager;
+    this.#environment = options.environment ?? memoryEnvironment;
   }
 
   /**
@@ -440,7 +440,7 @@ export class McpContext implements Context, BrowserlessContext {
   }
 
   async validatePath(filePath: string): Promise<string> {
-    return normalizeMemoryPath(filePath);
+    return this.#environment.normalizePath(filePath);
   }
 
   async ensureExtension<Extension extends `.${string}`>(
@@ -874,15 +874,29 @@ export class McpContext implements Context, BrowserlessContext {
   }
 
   async readFile(filePath: string): Promise<Uint8Array> {
-    return await readMemoryFile(await this.validatePath(filePath));
+    return await this.#environment.fileSystem.readFile(
+      await this.validatePath(filePath),
+    );
+  }
+
+  async #writeFile(filePath: string, data: Uint8Array): Promise<string> {
+    const normalizedPath = this.#environment.normalizePath(filePath);
+    const separator = normalizedPath.lastIndexOf('/');
+    const parentPath =
+      separator === 0 ? '/' : normalizedPath.slice(0, separator);
+    await this.#environment.fileSystem.mkdir(parentPath, {
+      recursive: true,
+    });
+    await this.#environment.fileSystem.writeFile(normalizedPath, data);
+    return normalizedPath;
   }
 
   async saveTemporaryFile(
     data: Uint8Array<ArrayBufferLike>,
     filename: string,
   ): Promise<{filepath: string}> {
-    const filepath = getMemoryTempFilePath(filename);
-    await writeMemoryFile(filepath, data);
+    const filepath = this.#environment.getTempFilePath(filename);
+    await this.#writeFile(filepath, data);
     return {filepath};
   }
 
@@ -895,7 +909,7 @@ export class McpContext implements Context, BrowserlessContext {
       clientProvidedFilePath,
       extension,
     );
-    await writeMemoryFile(filePath, data);
+    await this.#writeFile(filePath, data);
     return {filename: filePath};
   }
 
@@ -1085,7 +1099,9 @@ export class McpContext implements Context, BrowserlessContext {
 
     if (url.protocol === 'file:') {
       return new TextDecoder().decode(
-        await readMemoryFile(normalizeMemoryFileUrl(path)),
+        await this.#environment.fileSystem.readFile(
+          this.#environment.normalizeFileUrl(path),
+        ),
       );
     }
 

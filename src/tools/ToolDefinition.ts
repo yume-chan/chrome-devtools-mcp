@@ -341,6 +341,8 @@ export interface Response {
 
 export type SupportedExtensions =
   | '.png'
+  | '.heapsnapshot'
+  | '.heaptimeline'
   | '.jpeg'
   | '.webp'
   | '.json'

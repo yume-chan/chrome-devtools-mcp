@@ -387,7 +387,7 @@ export const CLI_EXAMPLES: Array<[string, string]> = [
 ];
 
 export const CONFLICTING_ARGS: Array<Array<keyof McpOptions>> = [
-  ['browserUrl', 'wsEndpoint', 'transport'],
+  ['browserUrl', 'wsEndpoint'],
   ['blockedUrlPattern', 'allowedUrlPattern'],
   ['allowUnrestrictedPaths', 'filesystemRoot'],
   ['categoryPwa', 'browserUrl', 'wsEndpoint'],

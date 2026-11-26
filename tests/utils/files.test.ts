@@ -9,20 +9,23 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {describe, it} from 'node:test';
+import sinon from 'sinon';
 
 import {getTempFilePath, resolveCanonicalPath} from '../../src/utils/files.js';
 import {
+  getMemoryTempFilePath,
   memoryFileSystem,
   normalizeMemoryFileUrl,
   normalizeMemoryPath,
   readMemoryFile,
   writeMemoryFile,
-} from '../../src/utils/memfs.js';
+} from '../../src/utils/memory-file-system.js';
 import {
   memoryFileSystem as browserMemoryFileSystem,
+  opfsFileSystem,
   readMemoryFile as readBrowserMemoryFile,
   writeMemoryFile as writeBrowserMemoryFile,
-} from '../../src/utils/memfs-browser.js';
+} from '../../src/utils/memory-file-system-browser.js';
 import {createDisposableTempFile, createTempDir} from '../utils.js';
 
 async function createSymlinkOrSkip(
@@ -190,9 +193,19 @@ describe('getTempFilePath', () => {
   }
 });
 
-describe('memfs file helpers', () => {
+describe('memory file helpers', () => {
+  it('generates distinct temp directories for repeated filenames', () => {
+    const firstPath = getMemoryTempFilePath('shot.png');
+    const secondPath = getMemoryTempFilePath('shot.png');
+
+    assert.notStrictEqual(
+      firstPath.slice(0, firstPath.lastIndexOf('/')),
+      secondPath.slice(0, secondPath.lastIndexOf('/')),
+    );
+  });
+
   it('normalizes and stores virtual files', async () => {
-    const filePath = `/tests/memfs-${Date.now()}/nested\\file.txt`;
+    const filePath = `/tests/memory-${Date.now()}/nested\\file.txt`;
     const data = new TextEncoder().encode('virtual file');
     const normalizedPath = normalizeMemoryPath(filePath);
 
@@ -200,7 +213,7 @@ describe('memfs file helpers', () => {
     try {
       assert.deepStrictEqual(await readMemoryFile(normalizedPath), data);
     } finally {
-      await memoryFileSystem.promises.rm(
+      await memoryFileSystem.rm(
         normalizedPath.slice(0, normalizedPath.lastIndexOf('/')),
         {recursive: true},
       );
@@ -210,7 +223,7 @@ describe('memfs file helpers', () => {
   it('rejects paths that escape the virtual filesystem root', () => {
     assert.throws(
       () => normalizeMemoryPath('../../outside.txt'),
-      /escapes the in-memory filesystem/,
+      /escapes the memory filesystem/,
     );
   });
 
@@ -222,20 +235,91 @@ describe('memfs file helpers', () => {
   });
 });
 
-describe('browser memfs adapter', () => {
+describe('browser memory file system adapter', () => {
   it('reads and removes files in nested virtual directories', async () => {
-    const filePath = `/tests/browser-memfs-${Date.now()}/nested/file.txt`;
+    const filePath = `/tests/browser-opfs-${Date.now()}/nested/file.txt`;
     const directoryPath = filePath.slice(0, filePath.lastIndexOf('/'));
-    const data = new TextEncoder().encode('browser virtual file');
+    const data = new TextEncoder().encode('browser OPFS file');
 
     await writeBrowserMemoryFile(filePath, data);
     try {
       assert.deepStrictEqual(await readBrowserMemoryFile(filePath), data);
     } finally {
-      await browserMemoryFileSystem.promises.rm(
+      await browserMemoryFileSystem.rm(
         directoryPath.slice(0, directoryPath.lastIndexOf('/')),
         {recursive: true},
       );
+    }
+  });
+
+  it('rejects non-recursive OPFS mkdir when a parent is missing', async () => {
+    const getDirectoryHandle = sinon.stub();
+    getDirectoryHandle.callsFake(async () => {
+      throw new DOMException(
+        'The parent directory does not exist.',
+        'NotFoundError',
+      );
+    });
+    const root = {getDirectoryHandle};
+    const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      'storage',
+    );
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        getDirectory: async () => root,
+      },
+    });
+    try {
+      await assert.rejects(
+        opfsFileSystem.mkdir('/missing/child', {recursive: false}),
+        (error: unknown) =>
+          error instanceof DOMException && error.name === 'NotFoundError',
+      );
+      sinon.assert.calledOnceWithExactly(getDirectoryHandle, 'missing', {
+        create: false,
+      });
+    } finally {
+      if (originalStorageDescriptor) {
+        Object.defineProperty(navigator, 'storage', originalStorageDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, 'storage');
+      }
+    }
+  });
+
+  it('creates all missing directories for recursive OPFS mkdir', async () => {
+    const getDirectoryHandle = sinon.stub();
+    getDirectoryHandle.resolves({
+      getDirectoryHandle,
+    });
+    const root = {getDirectoryHandle};
+    const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      'storage',
+    );
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        getDirectory: async () => root,
+      },
+    });
+    try {
+      await opfsFileSystem.mkdir('/missing/child', {recursive: true});
+      sinon.assert.calledTwice(getDirectoryHandle);
+      sinon.assert.calledWithExactly(getDirectoryHandle.firstCall, 'missing', {
+        create: true,
+      });
+      sinon.assert.calledWithExactly(getDirectoryHandle.secondCall, 'child', {
+        create: true,
+      });
+    } finally {
+      if (originalStorageDescriptor) {
+        Object.defineProperty(navigator, 'storage', originalStorageDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, 'storage');
+      }
     }
   });
 });

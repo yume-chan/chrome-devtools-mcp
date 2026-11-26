@@ -20,7 +20,13 @@ import {isAllowedUrl} from './utils/url.js';
  */
 class BrowserAttempt {}
 
-export class BrowserManager {
+export interface BrowserManagerLike {
+  ensureBrowser(): Promise<Browser>;
+  abandonPendingAttempt(): void;
+  close(): Promise<void>;
+}
+
+export class BrowserManager implements BrowserManagerLike {
   #browser?: Browser;
   #browserMode?: 'launched' | 'connected';
   #initPromise?: Promise<Browser>;
@@ -42,70 +48,6 @@ export class BrowserManager {
       }
       return isAllowedUrl(url, {categoryExtensions: enableExtensions});
     };
-  }
-
-  /**
-   * Chrome refuses to start as root unless the sandbox is explicitly disabled and
-   * only says so on its stderr. Because we launch with `pipe: true`, Puppeteer
-   * never surfaces that stderr and the failure reaches the client as an opaque
-   * `Protocol error (Target.setDiscoverTargets): Target closed`. Detect the
-   * situation and explain the way out instead. See https://crbug.com/638180.
-   *
-   * Returns `undefined` when the failure cannot be explained by running as root,
-   * including on platforms without uids and when the sandbox was already disabled
-   * through `--chrome-arg` (in which case root is not what stopped Chrome).
-   */
-  static rootSandboxLaunchError(
-    error: Error,
-    args: readonly string[],
-    uid: number | undefined = process.getuid?.(),
-  ): Error | undefined {
-    if (uid !== 0) {
-      return undefined;
-    }
-    if (
-      args.some(
-        arg => arg === '--no-sandbox' || arg.startsWith('--no-sandbox='),
-      )
-    ) {
-      return undefined;
-    }
-    return new Error(
-      `Chrome failed to start: ${error.message}\n\n` +
-        'chrome-devtools-mcp is running as root and Chrome does not start as root ' +
-        '(https://crbug.com/638180). Run chrome-devtools-mcp as a non-root user; in a ' +
-        'container, create an unprivileged user in the image and switch to it with ' +
-        "USER. For the setup that Chrome's sandbox needs, see " +
-        'https://pptr.dev/troubleshooting#setting-up-chrome-linux-sandbox.',
-      {
-        cause: error,
-      },
-    );
-  }
-
-  /**
-   * Puppeteer reports a headed launch without a display as "Missing X server"
-   * and suggests its own `headless` option, which users of this server cannot
-   * set directly. Point them to the `--headless` flag instead.
-   *
-   * Returns `undefined` for headless launches and for unrelated failures.
-   */
-  static missingDisplayLaunchError(
-    error: Error,
-    headless: boolean,
-  ): Error | undefined {
-    if (headless || !error.message.includes('Missing X server')) {
-      return undefined;
-    }
-    return new Error(
-      `Chrome failed to start: ${error.message}\n\n` +
-        'No X server is available to show a headed Chrome window. Start ' +
-        'chrome-devtools-mcp with --headless, set DISPLAY to a running X ' +
-        'server, or run chrome-devtools-mcp under xvfb-run.',
-      {
-        cause: error,
-      },
-    );
   }
 
   async ensureBrowser(): Promise<Browser> {
@@ -192,8 +134,6 @@ export class BrowserManager {
     const {
       browserUrl: browserURL,
       wsEndpoint,
-      transport,
-      idGenerator,
       blockedUrlPattern: blocklist,
       allowedUrlPattern: allowlist,
       categoryExtensions: enableExtensions,
@@ -212,15 +152,8 @@ export class BrowserManager {
       connectOptions.browserWSEndpoint = wsEndpoint;
     } else if (browserURL) {
       connectOptions.browserURL = browserURL;
-    } else if (transport) {
-      connectOptions.transport = transport;
-      if (idGenerator) {
-        connectOptions.idGenerator = idGenerator;
-      }
     } else {
-      throw new Error(
-        'Either browserURL, wsEndpoint or transport must be provided',
-      );
+      throw new Error('Either browserURL or wsEndpoint must be provided');
     }
 
     logger?.(

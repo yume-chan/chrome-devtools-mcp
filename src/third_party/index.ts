@@ -9,12 +9,10 @@ import 'core-js/modules/es.set.union.v2.js';
 import 'core-js/proposals/iterator-helpers.js';
 
 import type {Flags, OutputMode, Result, RunnerResult} from 'lighthouse';
-import type {Page} from 'puppeteer-core/lib/puppeteer/puppeteer-core-browser.js';
 
 // eslint-disable-next-line no-restricted-imports
 import * as DevToolsRoot from '../../third_party/devtools-frontend/front_end/core/root/root.js';
 
-import type * as LighthouseBundle from './lighthouse-devtools-mcp-bundle.js';
 import * as zod from './zod.js';
 
 export type {Flags, Result, RunnerResult, OutputMode};
@@ -95,42 +93,6 @@ export async function getToonEncode(): Promise<(val: unknown) => string> {
 export async function getGcfEncode(): Promise<(val: unknown) => string> {
   const {encodeGeneric} = await import('@blackwell-systems/gcf');
   return encodeGeneric;
-}
-
-let lighthouseBundle: Promise<typeof LighthouseBundle> | undefined;
-
-/**
- * Loads the Lighthouse bundle on first use. The bundle is large and only the
- * Lighthouse tool uses it, so a static import slows down every process start.
- */
-function loadLighthouse(): Promise<typeof LighthouseBundle> {
-  lighthouseBundle ??= import('./lighthouse-devtools-mcp-bundle.js');
-  return lighthouseBundle;
-}
-
-export async function lighthouseSnapshot(
-  page: Page,
-  options: {flags?: Flags},
-): Promise<RunnerResult | undefined> {
-  const {snapshot} = await loadLighthouse();
-  return await snapshot(page, options);
-}
-
-export async function lighthouseNavigation(
-  page: Page,
-  url: string,
-  options: {flags?: Flags},
-): Promise<RunnerResult | undefined> {
-  const {navigation} = await loadLighthouse();
-  return await navigation(page, url, options);
-}
-
-export async function generateReport(
-  lhr: Result,
-  format: OutputMode,
-): Promise<string> {
-  const lighthouse = await loadLighthouse();
-  return lighthouse.generateReport(lhr, format);
 }
 
 DevToolsRoot.Runtime.experiments.register({
